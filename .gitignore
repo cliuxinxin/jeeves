@@ -205,3 +205,55 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# 依赖库
+node_modules/
+/dist
+
+# Next.js 构建输出
+.next/
+out/
+
+# 生产环境构建日志
+build/
+
+# 环境变量 (非常重要：绝对不要把密钥提交到 Git)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 日志文件
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 缓存
+.eslintcache
+.stylelintcache
+.next/cache/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.swp
+
+# 开发者工具/IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# 验证/测试相关
+.nyc_output
+coverage/
+.jest/
+
+# 性能分析相关
+.next-analyze/
+
+# 这里的排除项（如果你使用了 TypeScript）
+tsbuildinfo
+backend/data/jeeves.db
