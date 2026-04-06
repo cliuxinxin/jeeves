@@ -107,7 +107,6 @@ class LLMConfigTestRequest(BaseModel):
 class LLMConfigRecord(BaseModel):
     id: int
     name: str
-    api_key: str
     api_key_masked: str
     model: str
     base_url: str | None = None
@@ -165,3 +164,41 @@ class ConversationListResponse(BaseModel):
 class ConversationDetailResponse(BaseModel):
     conversation: ConversationRecord
     messages: list[ConversationMessageRecord]
+
+
+class GraphConfigCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    graph_type: str = Field(min_length=1, max_length=100)
+    system_prompt: str = Field(default="")
+
+    @field_validator("name", "graph_type", mode="before")
+    @classmethod
+    def strip_required_strings(cls, value: str) -> str:
+        return _strip_required(value)
+
+
+class GraphConfigUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    graph_type: str = Field(min_length=1, max_length=100)
+    system_prompt: str = Field(default="")
+
+    @field_validator("name", "graph_type", mode="before")
+    @classmethod
+    def strip_required_strings(cls, value: str) -> str:
+        return _strip_required(value)
+
+
+class GraphConfigRecord(BaseModel):
+    id: int
+    name: str
+    graph_type: str
+    system_prompt: str
+    is_active: bool
+    created_at: str
+    updated_at: str
+
+
+class GraphConfigListResponse(BaseModel):
+    items: list[GraphConfigRecord]
+    active_config_id: int | None = None
+

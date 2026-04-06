@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
+  Trash,
+  Network,
   LoaderCircle,
   PanelRightClose,
   Plus,
@@ -89,6 +91,45 @@ type LLMConfigTestResponse = {
   message: string;
   response_preview: string | null;
 };
+
+
+type SavedGraphConfig = {
+  id: number;
+  name: string;
+  graph_type: string;
+  system_prompt: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type GraphConfigListResponse = {
+  items: SavedGraphConfig[];
+  active_config_id: number | null;
+};
+
+type GraphFormState = {
+  id: number | null;
+  name: string;
+  graphType: string;
+  systemPrompt: string;
+};
+
+const emptyGraphForm: GraphFormState = {
+  id: null,
+  name: "",
+  graphType: "simple_chat",
+  systemPrompt: "You are a helpful assistant.",
+};
+
+function toGraphFormState(config: SavedGraphConfig): GraphFormState {
+  return {
+    id: config.id,
+    name: config.name,
+    graphType: config.graph_type,
+    systemPrompt: config.system_prompt,
+  };
+}
 
 type FormState = {
   id: number | null;
@@ -182,7 +223,14 @@ export default function AssistantWorkspace() {
   const [chatError, setChatError] = useState<string | null>(null);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<"model">("model");
+  
+  const [settingsSection, setSettingsSection] = useState<"model" | "graph">("model");
+  
+  const [graphConfigs, setGraphConfigs] = useState<SavedGraphConfig[]>([]);
+  const [graphForm, setGraphForm] = useState<GraphFormState>(emptyGraphForm);
+  const [isSavingGraph, setIsSavingGraph] = useState(false);
+  const [activatingGraphId, setActivatingGraphId] = useState<number | null>(null);
+
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
   const [configs, setConfigs] = useState<SavedLLMConfig[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -206,6 +254,25 @@ export default function AssistantWorkspace() {
     const data = await fetchJson<ConversationListResponse>(`${API_URL}/api/conversations`);
     setConversations(data.items);
     return data.items;
+  }
+
+  async function refreshGraphConfigs() {
+    try {
+      const data = await fetchJson<GraphConfigListResponse>(`${API_URL}/api/graph-configs`);
+      setGraphConfigs(data.items);
+      return data.items;
+    } catch {
+      return [];
+    }
+  }
+
+  async function handleActivateGraphConfigFromChat(configId: number) {
+    try {
+      await fetchJson<SavedGraphConfig>(`${API_URL}/api/graph-configs/${configId}/activate`, { method: "POST" });
+      await refreshGraphConfigs();
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "切换工作流失败。");
+    }
   }
 
   async function loadConversation(conversationId: number) {
@@ -249,8 +316,11 @@ export default function AssistantWorkspace() {
     setIsBootstrapping(true);
 
     try {
-      await refreshRuntimeStatus();
-      await ensureConversation();
+      await Promise.all([
+        refreshRuntimeStatus(),
+        ensureConversation(),
+        refreshGraphConfigs()
+      ]);
     } catch (error) {
       setChatError(error instanceof Error ? error.message : "初始化失败。");
     } finally {
@@ -262,13 +332,15 @@ export default function AssistantWorkspace() {
     void initializeWorkspace();
   }, []);
 
-  async function loadSettings(preferredConfigId?: number | null) {
+  
+  async function loadSettings(preferredConfigId?: number | null, preferredGraphId?: number | null) {
     setIsLoadingSettings(true);
 
     try {
-      const [configData, healthData] = await Promise.all([
+      const [configData, healthData, graphData] = await Promise.all([
         fetchJson<LLMConfigListResponse>(`${API_URL}/api/llm-configs`),
         fetchJson<RuntimeStatus>(`${API_URL}/api/health`),
+        fetchJson<GraphConfigListResponse>(`${API_URL}/api/graph-configs`),
       ]);
 
       setConfigs(configData.items);
@@ -278,6 +350,14 @@ export default function AssistantWorkspace() {
         const selected = configData.items.find((item) => item.id === targetId);
         return selected ? toFormState(selected) : emptyForm;
       });
+      
+      setGraphConfigs(graphData.items);
+      setGraphForm((current) => {
+        const targetId = preferredGraphId ?? current.id ?? graphData.active_config_id ?? graphData.items[0]?.id ?? null;
+        const selected = graphData.items.find((item) => item.id === targetId);
+        return selected ? toGraphFormState(selected) : emptyGraphForm;
+      });
+
     } catch (error) {
       setSettingsNotice({
         type: "error",
@@ -300,6 +380,23 @@ export default function AssistantWorkspace() {
     await loadConversation(conversationId);
   }
 
+  
+  async function handleDeleteConversation(conversationId: number) {
+    try {
+      await fetchJson(`${API_URL}/api/conversations/${conversationId}`, { method: "DELETE" });
+      const items = await refreshConversations();
+      if (activeConversationId === conversationId) {
+        if (items.length > 0) {
+          await loadConversation(items[0].id);
+        } else {
+          await handleNewConversation();
+        }
+      }
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "删除失败。");
+    }
+  }
+
   async function handleNewConversation() {
     setChatError(null);
 
@@ -312,6 +409,73 @@ export default function AssistantWorkspace() {
     }
   }
 
+  
+  function updateGraphForm<K extends keyof GraphFormState>(key: K, value: GraphFormState[K]) {
+    setGraphForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleSaveGraphConfig() {
+    if (!graphForm.name.trim()) {
+      setSettingsNotice({ type: "error", text: "请填写配置名称" });
+      return;
+    }
+    setIsSavingGraph(true);
+    setSettingsNotice(null);
+    try {
+      const payload = {
+        name: graphForm.name.trim(),
+        graph_type: graphForm.graphType,
+        system_prompt: graphForm.systemPrompt,
+      };
+      const saved = graphForm.id
+        ? await fetchJson<SavedGraphConfig>(`${API_URL}/api/graph-configs/${graphForm.id}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          })
+        : await fetchJson<SavedGraphConfig>(`${API_URL}/api/graph-configs`, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+      
+      await loadSettings(null, saved.id);
+      setSettingsNotice({ type: "success", text: graphForm.id ? "图配置已更新" : "图配置已创建" });
+    } catch(error) {
+      setSettingsNotice({ type: "error", text: error instanceof Error ? error.message : "保存失败" });
+    } finally {
+      setIsSavingGraph(false);
+    }
+  }
+
+  async function handleActivateGraphConfig(configId: number) {
+    setActivatingGraphId(configId);
+    setSettingsNotice(null);
+    try {
+      const activated = await fetchJson<SavedGraphConfig>(`${API_URL}/api/graph-configs/${configId}/activate`, { method: "POST" });
+      await loadSettings(null, activated.id);
+      setSettingsNotice({ type: "success", text: `已启用 ${activated.name}。` });
+    } catch (error) {
+      setSettingsNotice({ type: "error", text: error instanceof Error ? error.message : "启用失败。" });
+    } finally {
+      setActivatingGraphId(null);
+    }
+  }
+
+  async function handleDeleteGraphConfig(configId: number) {
+    if (!confirm("确认删除此配置？")) return;
+    try {
+      await fetchJson(`${API_URL}/api/graph-configs/${configId}`, { method: "DELETE" });
+      await loadSettings();
+      setSettingsNotice({ type: "success", text: "图配置已删除" });
+    } catch (error) {
+      setSettingsNotice({ type: "error", text: error instanceof Error ? error.message : "删除失败。" });
+    }
+  }
+
+  function handleCreateNewGraphConfig() {
+    setGraphForm(emptyGraphForm);
+    setSettingsNotice(null);
+  }
+
   function updateForm<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
@@ -319,7 +483,7 @@ export default function AssistantWorkspace() {
   function validateForm() {
     if (!form.name.trim()) throw new Error("请填写配置名称。");
     if (!form.model.trim()) throw new Error("请填写模型名称。");
-    if (!form.apiKey.trim()) throw new Error("请填写 API Key。");
+    if (!form.id && !form.apiKey.trim()) throw new Error("请填写 API Key。");
   }
 
   function buildConfigPayload() {
@@ -412,6 +576,17 @@ export default function AssistantWorkspace() {
     }
   }
 
+  async function handleDeleteConfig(configId: number) {
+    if (!confirm("确认删除此配置？")) return;
+    try {
+      await fetchJson(`${API_URL}/api/llm-configs/${configId}`, { method: "DELETE" });
+      await loadSettings();
+      setSettingsNotice({ type: "success", text: "配置已删除" });
+    } catch (error) {
+      setSettingsNotice({ type: "error", text: error instanceof Error ? error.message : "删除失败。" });
+    }
+  }
+
   function handleSelectConfig(config: SavedLLMConfig) {
     setForm(toFormState(config));
     setSettingsNotice(null);
@@ -439,8 +614,7 @@ export default function AssistantWorkspace() {
       }
     }
 
-    const userMessageId = `local-user-${Date.now()}`;
-    const assistantMessageId = `local-assistant-${Date.now()}`;
+    const userMessageId = `temp-user-${Date.now()}`;
     const messageText = trimmed;
 
     setInput("");
@@ -452,11 +626,6 @@ export default function AssistantWorkspace() {
         id: userMessageId,
         role: "user",
         content: messageText,
-      },
-      {
-        id: assistantMessageId,
-        role: "assistant",
-        content: "",
       },
     ]);
 
@@ -500,37 +669,35 @@ export default function AssistantWorkspace() {
           if (!parsed) continue;
 
           if (parsed.event === "chunk") {
+            const node = typeof parsed.data.node === "string" ? parsed.data.node : "assistant";
             const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
             if (!text) continue;
-            setMessages((current) =>
-              current.map((message) =>
-                message.id === assistantMessageId
-                  ? { ...message, content: `${message.content}${text}` }
-                  : message,
-              ),
-            );
+            
+            setMessages((current) => {
+              const tempId = `temp-${node}`;
+              const exists = current.find(m => m.id === tempId);
+              if (exists) {
+                return current.map(m => m.id === tempId ? { ...m, content: m.content + text } : m);
+              } else {
+                return [...current, { id: tempId, role: "assistant", content: text as string }];
+              }
+            });
           }
 
           if (parsed.event === "done") {
-            const message = parsed.data.message as ConversationMessage | undefined;
-            if (!message) continue;
+            const finalMessages = parsed.data.messages as ConversationMessage[] | undefined;
+            if (!finalMessages) continue;
 
-            setMessages((current) =>
-              current.map((item) => {
+            setMessages((current) => {
+              let nextMessages = current.map((item) => {
                 if (item.id === userMessageId) {
                   return { ...item, id: `synced-user-${Date.now()}` };
                 }
-                if (item.id === assistantMessageId) {
-                  return {
-                    id: message.id,
-                    role: message.role,
-                    content: message.content,
-                    created_at: message.created_at,
-                  };
-                }
                 return item;
-              }),
-            );
+              }).filter((item) => !(item.role === "assistant" && String(item.id).startsWith("temp-")));
+              
+              return [...nextMessages, ...finalMessages];
+            });
           }
 
           if (parsed.event === "error") {
@@ -568,27 +735,39 @@ export default function AssistantWorkspace() {
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-2 pr-2">
             {conversations.map((conversation) => (
-              <button
+              <div
                 key={conversation.id}
-                type="button"
                 className={cn(
-                  "w-full rounded-3xl border px-4 py-3 text-left transition-colors",
+                  "group relative w-full rounded-3xl border px-4 py-3 text-left transition-colors",
                   conversation.id === activeConversationId
                     ? "border-slate-950 bg-slate-950 text-white"
                     : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50",
                 )}
-                onClick={() => void handleSelectConversation(conversation.id)}
               >
-                <div className="truncate text-sm font-semibold">{conversation.title}</div>
-                <div
-                  className={cn(
-                    "mt-1 line-clamp-2 text-xs leading-5",
-                    conversation.id === activeConversationId ? "text-slate-300" : "text-slate-500",
-                  )}
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => void handleSelectConversation(conversation.id)}
                 >
-                  {conversation.preview || "暂无消息"}
-                </div>
-              </button>
+                    <div className="truncate text-sm font-semibold pr-6">{conversation.title}</div>
+                    <div
+                    className={cn(
+                        "mt-1 line-clamp-2 text-xs leading-5",
+                        conversation.id === activeConversationId ? "text-slate-300" : "text-slate-500",
+                    )}
+                    >
+                    {conversation.preview || "暂无消息"}
+                    </div>
+                </button>
+                <button
+                    type="button"
+                    className="absolute right-3 top-3 hidden group-hover:block p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-rose-500 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); void handleDeleteConversation(conversation.id); }}
+                    title="删除对话"
+                >
+                    <Trash className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         </ScrollArea>
@@ -599,6 +778,8 @@ export default function AssistantWorkspace() {
           className="h-full"
           title={activeConversation?.title ?? "New chat"}
           runtimeStatus={runtimeStatus}
+          graphConfigs={graphConfigs}
+          onActivateGraphConfig={(id) => void handleActivateGraphConfigFromChat(id)}
           messages={messages}
           input={input}
           error={chatError}
@@ -629,24 +810,42 @@ export default function AssistantWorkspace() {
                 </div>
 
                 <div className="mt-6 space-y-2">
+                  
                   <button
                     type="button"
                     className={cn(
-                      "w-full rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
+                      "w-full rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors flex items-center gap-2",
                       settingsSection === "model"
                         ? "bg-slate-950 text-white"
                         : "bg-white text-slate-700 hover:bg-slate-100",
                     )}
                     onClick={() => setSettingsSection("model")}
                   >
+                    <Settings2 className="w-4 h-4" /> 
                     模型配置
                   </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "w-full rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors flex items-center gap-2",
+                      settingsSection === "graph"
+                        ? "bg-slate-950 text-white"
+                        : "bg-white text-slate-700 hover:bg-slate-100",
+                    )}
+                    onClick={() => setSettingsSection("graph")}
+                  >
+                    <Network className="w-4 h-4" />
+                    工作流配置
+                  </button>
+
                 </div>
               </aside>
 
               <div className="min-h-0">
                 <ScrollArea className="h-full">
                   <div className="space-y-6 p-5 sm:p-6">
+                    {settingsSection === "model" ? (
+                      <>
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <h2 className="font-display text-2xl font-semibold text-slate-950">模型配置</h2>
@@ -738,7 +937,7 @@ export default function AssistantWorkspace() {
 
                                   <div
                                     className={cn(
-                                      "mt-3 text-xs",
+                                      "mt-3 text-xs block truncate w-full max-w-[200px] sm:max-w-[300px]",
                                       isSelected ? "text-slate-300" : "text-slate-500",
                                     )}
                                   >
@@ -768,6 +967,15 @@ export default function AssistantWorkspace() {
                                       )}
                                       启用
                                     </Button>
+                                    <button
+                                      type="button"
+                                      className="ml-auto p-1.5 text-slate-400 hover:text-white hover:bg-rose-500 rounded-md transition-colors"
+                                      onClick={() => void handleDeleteConfig(config.id)}
+                                      title="删除配置"
+                                      disabled={isTesting || isSaving}
+                                    >
+                                      <Trash className="w-4 h-4" />
+                                    </button>
                                   </div>
                                 </div>
                               );
@@ -799,12 +1007,15 @@ export default function AssistantWorkspace() {
                         </div>
 
                         <div className="space-y-2">
+                          
                           <label className="text-sm font-medium text-slate-700">API Key</label>
                           <Input
                             type="password"
+                            placeholder={form.id ? "已保存配置 (留空则不修改)" : "API Key"}
                             value={form.apiKey}
                             onChange={(event) => updateForm("apiKey", event.target.value)}
                           />
+
                         </div>
 
                         <div className="space-y-2">
@@ -883,6 +1094,119 @@ export default function AssistantWorkspace() {
                         </div>
                       </div>
                     </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <h2 className="font-display text-2xl font-semibold text-slate-950">工作流与图配置</h2>
+                          <p className="mt-1 text-sm text-slate-500">动态配置后端处理图及节点提示词。</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isLoadingSettings ? (
+                            <div className="inline-flex items-center gap-2 text-sm text-slate-500">
+                              <LoaderCircle className="h-4 w-4 animate-spin" />
+                              加载中
+                            </div>
+                          ) : null}
+                          <Button type="button" variant="secondary" className="h-10 px-3" onClick={handleCreateNewGraphConfig}>
+                            <Plus className="h-4 w-4" />
+                            新建
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                        <div className="space-y-3">
+                          <div className="text-sm font-semibold text-slate-900">已保存配置</div>
+                          {graphConfigs.length ? (
+                            <div className="space-y-3">
+                              {graphConfigs.map((config) => {
+                                const isSelected = graphForm.id === config.id;
+                                return (
+                                  <div key={config.id} className={cn("rounded-3xl border p-4 transition-colors", isSelected ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-900")}>
+                                    <div className="flex items-start justify-between gap-3">
+                                      <button type="button" className="flex-1 text-left" onClick={() => { setGraphForm(toGraphFormState(config)); setSettingsNotice(null); }}>
+                                        <div className="text-sm font-semibold">{config.name}</div>
+                                        <div className={cn("mt-1 text-xs", isSelected ? "text-slate-300" : "text-slate-500")}>
+                                          类型: {config.graph_type}
+                                        </div>
+                                      </button>
+                                      {config.is_active ? (
+                                        <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium", isSelected ? "bg-white/10 text-white" : "bg-emerald-50 text-emerald-700")}>当前</span>
+                                      ) : null}
+                                    </div>
+                                    <div className="mt-4 flex gap-2">
+                                      <Button type="button" variant={isSelected ? "secondary" : "default"} className={cn("h-9 px-3 text-xs", !isSelected && "shadow-none")} onClick={() => { setGraphForm(toGraphFormState(config)); setSettingsNotice(null); }}>编辑</Button>
+                                      <Button type="button" variant="secondary" className="h-9 px-3 text-xs" onClick={() => void handleActivateGraphConfig(config.id)} disabled={config.is_active || activatingGraphId === config.id}>
+                                        {activatingGraphId === config.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} 启用
+                                      </Button>
+                                      {!config.is_active && (
+                                        <button
+                                          type="button"
+                                          className={cn("ml-auto flex items-center justify-center rounded-xl p-2.5 transition-colors", isSelected ? "bg-white/10 text-slate-300 hover:bg-rose-500/20 hover:text-rose-400" : "bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500")}
+                                          onClick={() => void handleDeleteGraphConfig(config.id)}
+                                          title="删除配置"
+                                        >
+                                          <Trash className="h-4 w-4" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-5 text-sm text-slate-500">还没有配置工作流。</div>
+                          )}
+                        </div>
+
+                        <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-semibold text-slate-900">{graphForm.id ? "编辑配置" : "新建配置"}</div>
+                            {graphForm.id ? <div className="text-xs text-slate-500">ID #{graphForm.id}</div> : null}
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-700">配置名称</label>
+                            <Input value={graphForm.name} onChange={(e) => updateGraphForm("name", e.target.value)} />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-700">内置处理拓扑</label>
+                            <select
+                              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
+                              value={graphForm.graphType}
+                              onChange={(e) => updateGraphForm("graphType", e.target.value)}
+                            >
+                              <option value="simple_chat">简单对话 (Simple Chat)</option>
+                              <option value="summary_analysis">总结分析 (Summary & Analysis)</option>
+                            </select>
+                            <p className="text-xs text-slate-500">拓扑逻辑已在后端代码中硬编码实现，请根据所需处理流选择对应的标识。</p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium text-slate-700">系统提示词 (System Prompt)</label>
+                              <span className="text-xs text-slate-500">此提示词将被注入到对应的节点中。</span>
+                            </div>
+                            <textarea 
+                              className="flex min-h-[140px] w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                              value={graphForm.systemPrompt} onChange={(e) => updateGraphForm("systemPrompt", e.target.value)} 
+                              placeholder="在这里编写 Prompt（支持代码定义的占位符控制逻辑）"
+                            />
+                          </div>
+
+                          <div className="flex flex-wrap gap-3">
+                            <Button type="button" onClick={() => void handleSaveGraphConfig()} disabled={isSavingGraph}>
+                              {isSavingGraph ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                              {graphForm.id ? "保存修改" : "创建配置"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
                   </div>
                 </ScrollArea>
               </div>

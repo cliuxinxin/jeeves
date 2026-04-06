@@ -11,13 +11,14 @@ class LLMConfigNotFoundError(Exception):
 def _mask_api_key(api_key: str) -> str:
     if len(api_key) <= 8:
         return "*" * len(api_key)
-    return f"{api_key[:4]}{'*' * max(4, len(api_key) - 8)}{api_key[-4:]}"
+    return f"{api_key[:4]}***{api_key[-4:]}"
 
 
 def _row_to_record(row: sqlite3.Row) -> LLMConfigRecord:
     payload = dict(row)
     payload["is_active"] = bool(payload["is_active"])
     payload["api_key_masked"] = _mask_api_key(payload["api_key"])
+    payload.pop("api_key", None)
     return LLMConfigRecord.model_validate(payload)
 
 
@@ -49,6 +50,20 @@ def get_active_llm_config() -> LLMConfigRecord | None:
             """
         ).fetchone()
     return _row_to_record(row) if row else None
+
+
+def get_active_llm_config_with_key() -> dict | None:
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM llm_configs
+            WHERE is_active = 1
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def create_llm_config(payload: LLMConfigCreateRequest) -> LLMConfigRecord:
@@ -121,3 +136,23 @@ def activate_llm_config(config_id: int) -> LLMConfigRecord:
     if row is None:
         raise LLMConfigNotFoundError(f"LLM config {config_id} was not found.")
     return _row_to_record(row)
+
+
+def delete_llm_config(config_id: int) -> None:
+    with get_connection() as connection:
+        existing_row = _fetch_config_row(connection, config_id)
+        if existing_row is None:
+            raise LLMConfigNotFoundError(f"LLM config {config_id} was not found.")
+
+        is_active = bool(existing_row["is_active"])
+        connection.execute("DELETE FROM llm_configs WHERE id = ?", (config_id,))
+        
+        if is_active:
+            latest_row = connection.execute(
+                "SELECT id FROM llm_configs ORDER BY updated_at DESC, id DESC LIMIT 1"
+            ).fetchone()
+            if latest_row:
+                connection.execute(
+                    "UPDATE llm_configs SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (latest_row["id"],)
+                )

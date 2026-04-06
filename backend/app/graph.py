@@ -1,27 +1,16 @@
-from functools import lru_cache
-from typing import Annotated, TypedDict
+from .graph_config_store import get_active_graph_config
+from .graphs.simple_chat import build_simple_chat_graph
+from .graphs.summary_analysis import build_summary_analysis_graph
 
-from langchain_core.messages import AnyMessage
-from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import add_messages
-
-from .llm import get_llm
-
-
-class GraphState(TypedDict):
-    messages: Annotated[list[AnyMessage], add_messages]
-
-
-async def assistant(state: GraphState) -> dict[str, list[AnyMessage]]:
-    llm = get_llm()
-    response = await llm.ainvoke(state["messages"])
-    return {"messages": [response]}
-
-
-@lru_cache(maxsize=1)
 def get_graph():
-    builder = StateGraph(GraphState)
-    builder.add_node("assistant", assistant)
-    builder.add_edge(START, "assistant")
-    builder.add_edge("assistant", END)
-    return builder.compile()
+    active_config = get_active_graph_config()
+    if not active_config:
+        return build_simple_chat_graph(system_prompt="")
+        
+    system_prompt = active_config.system_prompt
+    graph_type = active_config.graph_type
+    
+    if graph_type == "summary_analysis":
+        return build_summary_analysis_graph(system_prompt=system_prompt)
+        
+    return build_simple_chat_graph(system_prompt=system_prompt)

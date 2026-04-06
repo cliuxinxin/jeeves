@@ -153,3 +153,13 @@ def append_message(conversation_id: int, role: str, content: str) -> Conversatio
     if row is None:
         raise ConversationNotFoundError(f"Conversation {conversation_id} was not found.")
     return _row_to_message_record(row)
+
+
+def delete_conversation(conversation_id: int) -> None:
+    with get_connection() as connection:
+        exists = connection.execute("SELECT 1 FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+        if exists is None:
+            raise ConversationNotFoundError(f"Conversation {conversation_id} was not found.")
+        
+        connection.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+

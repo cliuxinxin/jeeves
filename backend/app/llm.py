@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from langchain_openai import ChatOpenAI
 
 from .config import get_settings
-from .llm_config_store import get_active_llm_config
+from .llm_config_store import get_active_llm_config_with_key
 from .messages import from_langchain_message
 from .schemas import LLMConfigTestRequest
 
@@ -20,16 +20,16 @@ class ResolvedLLMConfig:
 
 
 def resolve_llm_config() -> ResolvedLLMConfig:
-    active_config = get_active_llm_config()
-    if active_config:
+    active_row = get_active_llm_config_with_key()
+    if active_row:
         return ResolvedLLMConfig(
             source="database",
-            name=active_config.name,
-            api_key=active_config.api_key,
-            model=active_config.model,
-            base_url=active_config.base_url,
-            temperature=active_config.temperature,
-            max_retries=active_config.max_retries,
+            name=active_row["name"],
+            api_key=active_row["api_key"],
+            model=active_row["model"],
+            base_url=active_row["base_url"],
+            temperature=active_row["temperature"],
+            max_retries=active_row["max_retries"],
         )
 
     settings = get_settings()

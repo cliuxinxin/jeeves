@@ -2,6 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { LoaderCircle, Plus, Send, Settings2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,10 +25,20 @@ type Message = {
   content: string;
 };
 
+type SavedGraphConfig = {
+  id: number;
+  name: string;
+  graph_type: string;
+  system_prompt: string;
+  is_active: boolean;
+};
+
 type ChatAssistantProps = {
   className?: string;
   title: string;
   runtimeStatus?: RuntimeStatus | null;
+  graphConfigs: SavedGraphConfig[];
+  onActivateGraphConfig: (id: number) => void;
   messages: Message[];
   input: string;
   error: string | null;
@@ -42,6 +55,8 @@ export default function ChatAssistant({
   className,
   title,
   runtimeStatus,
+  graphConfigs,
+  onActivateGraphConfig,
   messages,
   input,
   error,
@@ -65,13 +80,36 @@ export default function ChatAssistant({
     ? `${runtimeStatus.config_name} · ${runtimeStatus.model}`
     : "尚未启用模型配置";
 
+  const activeGraphId = graphConfigs.find((c) => c.is_active)?.id;
+
   return (
     <Card className={cn("flex h-full min-h-0 w-full flex-col overflow-hidden border-slate-200 bg-white/92", className)}>
       <CardHeader className="border-b border-slate-200/80 pb-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <CardTitle className="font-display text-xl font-semibold text-slate-950">{title}</CardTitle>
-            <p className="mt-1 text-sm text-slate-500">{modelLabel}</p>
+            <div className="mt-1 flex items-center gap-3">
+              <span className="text-sm text-slate-500">{modelLabel}</span>
+              <span className="text-slate-300">|</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-500">工作流:</span>
+                <select 
+                  className="bg-transparent text-sm text-slate-700 font-medium focus:outline-none border-b border-dashed border-slate-300 pb-0.5 max-w-[150px] truncate cursor-pointer"
+                  value={activeGraphId ?? ""}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                       onActivateGraphConfig(Number(e.target.value));
+                    }
+                  }}
+                  disabled={graphConfigs.length === 0}
+                >
+                  <option value="" disabled>-- 暂无工作流 --</option>
+                  {graphConfigs.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -103,11 +141,19 @@ export default function ChatAssistant({
                     className={cn(
                       "max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-6",
                       message.role === "user"
-                        ? "bg-slate-950 text-white"
+                        ? "bg-slate-950 text-white max-h-96 overflow-y-auto"
                         : "border border-slate-200 bg-slate-50 text-slate-700",
                     )}
                   >
-                    <p className="whitespace-pre-wrap">{message.content}</p>
+                    {message.role === "assistant" ? (
+                      <div className="prose prose-sm prose-slate max-w-none prose-p:leading-6 prose-pre:bg-slate-800 prose-pre:text-slate-50">
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{message.content}</p>
+                    )}
                   </div>
                 </div>
               ))}
