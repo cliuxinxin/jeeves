@@ -146,7 +146,7 @@ def delete_llm_config(config_id: int) -> None:
 
         is_active = bool(existing_row["is_active"])
         connection.execute("DELETE FROM llm_configs WHERE id = ?", (config_id,))
-        
+
         if is_active:
             latest_row = connection.execute(
                 "SELECT id FROM llm_configs ORDER BY updated_at DESC, id DESC LIMIT 1"
@@ -154,5 +154,5 @@ def delete_llm_config(config_id: int) -> None:
             if latest_row:
                 connection.execute(
                     "UPDATE llm_configs SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (latest_row["id"],)
+                    (latest_row["id"],),
                 )

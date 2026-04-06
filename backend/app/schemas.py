@@ -1,6 +1,12 @@
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class GraphType(str, Enum):
+    SIMPLE_CHAT = "simple_chat"
+    SUMMARY_ANALYSIS = "summary_analysis"
 
 
 class ChatMessage(BaseModel):
@@ -168,10 +174,12 @@ class ConversationDetailResponse(BaseModel):
 
 class GraphConfigCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    graph_type: str = Field(min_length=1, max_length=100)
+    graph_type: GraphType
     system_prompt: str = Field(default="")
+    analyzer_prompt: str = Field(default="")
+    deconstructor_prompt: str = Field(default="")
 
-    @field_validator("name", "graph_type", mode="before")
+    @field_validator("name", mode="before")
     @classmethod
     def strip_required_strings(cls, value: str) -> str:
         return _strip_required(value)
@@ -179,10 +187,12 @@ class GraphConfigCreateRequest(BaseModel):
 
 class GraphConfigUpdateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    graph_type: str = Field(min_length=1, max_length=100)
+    graph_type: GraphType
     system_prompt: str = Field(default="")
+    analyzer_prompt: str = Field(default="")
+    deconstructor_prompt: str = Field(default="")
 
-    @field_validator("name", "graph_type", mode="before")
+    @field_validator("name", mode="before")
     @classmethod
     def strip_required_strings(cls, value: str) -> str:
         return _strip_required(value)
@@ -191,8 +201,10 @@ class GraphConfigUpdateRequest(BaseModel):
 class GraphConfigRecord(BaseModel):
     id: int
     name: str
-    graph_type: str
+    graph_type: GraphType
     system_prompt: str
+    analyzer_prompt: str = ""
+    deconstructor_prompt: str = ""
     is_active: bool
     created_at: str
     updated_at: str
@@ -201,4 +213,3 @@ class GraphConfigRecord(BaseModel):
 class GraphConfigListResponse(BaseModel):
     items: list[GraphConfigRecord]
     active_config_id: int | None = None
-

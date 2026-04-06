@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { LoaderCircle, Plus, Send, Settings2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 
@@ -23,7 +23,105 @@ type Message = {
   id: number | string;
   role: "user" | "assistant" | "system";
   content: string;
+  node?: string;
 };
+
+function formatStageLabel(node?: string) {
+  if (!node) return null;
+  if (node === "analyzer") return "阶段 1 · 初步分析";
+  if (node === "deconstructor") return "阶段 2 · 拆解分析";
+  return `阶段 · ${node}`;
+}
+
+function stageAccentClass(node?: string) {
+  if (node === "analyzer") return "border-l-sky-400 bg-sky-50/60";
+  if (node === "deconstructor") return "border-l-emerald-400 bg-emerald-50/50";
+  return "border-l-slate-300 bg-white";
+}
+
+
+function normalizeMarkdown(content: string) {
+  return content
+    .replace(/\r\n/g, "\n")
+    .replace(/(^|\n)[·•●▪◦]\s+/g, "$1- ")
+    .replace(/(^|\n)-(?=\S)/g, "$1- ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+
+const markdownComponents: Components = {
+  h1: ({ children, ...props }) => (
+    <h1 className="mt-2 mb-4 font-display text-xl font-semibold tracking-tight text-slate-950" {...props}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children, ...props }) => (
+    <h2 className="mt-6 mb-3 font-display text-lg font-semibold tracking-tight text-slate-950 first:mt-2" {...props}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children, ...props }) => (
+    <h3 className="mt-5 mb-2 text-[15px] font-semibold text-slate-900 first:mt-2" {...props}>
+      {children}
+    </h3>
+  ),
+  p: ({ children, ...props }) => (
+    <p className="my-3 leading-7 text-slate-700" {...props}>
+      {children}
+    </p>
+  ),
+  ul: ({ children, ...props }) => (
+    <ul className="my-3 list-disc space-y-2 pl-5 text-slate-700 marker:text-slate-400" {...props}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children, ...props }) => (
+    <ol className="my-3 list-decimal space-y-2 pl-5 text-slate-700 marker:text-slate-400" {...props}>
+      {children}
+    </ol>
+  ),
+  li: ({ children, ...props }) => (
+    <li className="pl-1 leading-7" {...props}>
+      {children}
+    </li>
+  ),
+  blockquote: ({ children, ...props }) => (
+    <blockquote className="my-4 border-l-4 border-slate-200 pl-4 italic text-slate-600" {...props}>
+      {children}
+    </blockquote>
+  ),
+  pre: ({ children, ...props }) => (
+    <pre
+      className="my-4 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-950/95 px-4 py-3 text-[13px] leading-6 text-slate-50"
+      {...props}
+    >
+      {children}
+    </pre>
+  ),
+  code: ({ children, className, ...props }) => {
+    const isBlock = Boolean(className);
+    if (isBlock) {
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    }
+
+    return (
+      <code
+        className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[0.92em] text-slate-900"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
+  hr: (props) => <hr className="my-5 border-slate-200" {...props} />,
+};
+
+
 
 type SavedGraphConfig = {
   id: number;
@@ -142,13 +240,32 @@ export default function ChatAssistant({
                       "max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-6",
                       message.role === "user"
                         ? "bg-slate-950 text-white max-h-96 overflow-y-auto"
-                        : "border border-slate-200 bg-slate-50 text-slate-700",
+                        : cn(
+                            "border border-slate-200 text-slate-700",
+                            message.node ? "border-l-4" : null,
+                            message.node ? stageAccentClass(message.node) : "bg-slate-50",
+                            message.node === "analyzer" ? "py-2" : null,
+                          ),
                     )}
                   >
                     {message.role === "assistant" ? (
-                      <div className="prose prose-sm prose-slate max-w-none prose-p:leading-6 prose-pre:bg-slate-800 prose-pre:text-slate-50">
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-                          {message.content}
+                      <div
+                        className={cn(
+                          "prose prose-sm max-w-none text-slate-700",
+                          "prose-headings:font-inherit prose-headings:text-inherit",
+                          "prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0",
+                          "prose-code:before:content-none prose-code:after:content-none",
+                        )}
+                      >
+                        {message.node ? (
+                          <div className="not-prose mb-2 flex items-center justify-between gap-3">
+                            <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur">
+                              {formatStageLabel(message.node)}
+                            </div>
+                          </div>
+                        ) : null}
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
+                          {normalizeMarkdown(message.content)}
                         </ReactMarkdown>
                       </div>
                     ) : (

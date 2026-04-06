@@ -3,6 +3,7 @@ import sqlite3
 from .database import get_connection
 from .schemas import GraphConfigCreateRequest, GraphConfigRecord, GraphConfigUpdateRequest
 
+
 class GraphConfigNotFoundError(Exception):
     pass
 
@@ -48,13 +49,15 @@ def create_graph_config(payload: GraphConfigCreateRequest) -> GraphConfigRecord:
         config_count = connection.execute("SELECT COUNT(*) FROM graph_configs").fetchone()[0]
         cursor = connection.execute(
             """
-            INSERT INTO graph_configs (name, graph_type, system_prompt, is_active, updated_at)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO graph_configs (name, graph_type, system_prompt, analyzer_prompt, deconstructor_prompt, is_active, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """,
             (
                 payload.name,
                 payload.graph_type,
                 payload.system_prompt,
+                payload.analyzer_prompt,
+                payload.deconstructor_prompt,
                 1 if config_count == 0 else 0,
             ),
         )
@@ -73,13 +76,15 @@ def update_graph_config(config_id: int, payload: GraphConfigUpdateRequest) -> Gr
         connection.execute(
             """
             UPDATE graph_configs
-            SET name = ?, graph_type = ?, system_prompt = ?, updated_at = CURRENT_TIMESTAMP
+            SET name = ?, graph_type = ?, system_prompt = ?, analyzer_prompt = ?, deconstructor_prompt = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
             (
                 payload.name,
                 payload.graph_type,
                 payload.system_prompt,
+                payload.analyzer_prompt,
+                payload.deconstructor_prompt,
                 config_id,
             ),
         )
@@ -122,4 +127,6 @@ def delete_graph_config(config_id: int) -> None:
                 "SELECT id FROM graph_configs ORDER BY updated_at DESC, id DESC LIMIT 1"
             ).fetchone()
             if next_config:
-                connection.execute("UPDATE graph_configs SET is_active = 1 WHERE id = ?", (next_config["id"],))
+                connection.execute(
+                    "UPDATE graph_configs SET is_active = 1 WHERE id = ?", (next_config["id"],)
+                )

@@ -14,9 +14,9 @@ class GraphState(TypedDict):
 def build_simple_chat_graph(system_prompt: str):
     builder = StateGraph(GraphState)
     assistant_node = create_assistant_node(system_prompt)
-    
+
     builder.add_node("assistant", assistant_node)
     builder.add_edge(START, "assistant")
     builder.add_edge("assistant", END)
-    
+
     return builder.compile()

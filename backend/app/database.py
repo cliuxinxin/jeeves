@@ -19,6 +19,7 @@ def init_db() -> None:
 
     with sqlite3.connect(database_path) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA journal_mode = WAL")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS llm_configs (
@@ -64,17 +65,75 @@ def init_db() -> None:
                 name TEXT NOT NULL UNIQUE,
                 graph_type TEXT NOT NULL,
                 system_prompt TEXT NOT NULL,
+                analyzer_prompt TEXT NOT NULL DEFAULT '',
+                deconstructor_prompt TEXT NOT NULL DEFAULT '',
                 is_active INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation_id
+            ON conversation_messages (conversation_id)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_updated_at
+            ON conversations (updated_at DESC)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_configs_is_active
+            ON llm_configs (is_active, updated_at DESC)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_graph_configs_is_active
+            ON graph_configs (is_active, updated_at DESC)
+            """
+        )
+
+        # Lightweight migrations for existing databases.
+        cols = {row[1] for row in connection.execute("PRAGMA table_info(graph_configs)").fetchall()}
+        if "analyzer_prompt" not in cols:
+            connection.execute(
+                "ALTER TABLE graph_configs ADD COLUMN analyzer_prompt TEXT NOT NULL DEFAULT ''"
+            )
+        if "deconstructor_prompt" not in cols:
+            connection.execute(
+                "ALTER TABLE graph_configs ADD COLUMN deconstructor_prompt TEXT NOT NULL DEFAULT ''"
+            )
+
+        # Backfill prompts for existing rows so the UI shows something immediately.
+        # - summary_analysis previously used system_prompt as the main analysis prompt.
+        # - analyzer prompt did not exist before; provide a sensible default if empty.
+        connection.execute(
+            """
+            UPDATE graph_configs
+            SET deconstructor_prompt = system_prompt
+            WHERE graph_type = 'summary_analysis'
+              AND (deconstructor_prompt IS NULL OR deconstructor_prompt = '')
+              AND system_prompt IS NOT NULL
+              AND system_prompt != ''
+            """
+        )
+        connection.execute(
+            """
+            UPDATE graph_configs
+            SET analyzer_prompt = '你是一个专业的文本分类器。请阅读用户输入，判定文章类型，并在结尾严格输出：【文章类型：XXX】。'
+            WHERE graph_type = 'summary_analysis'
+              AND (analyzer_prompt IS NULL OR analyzer_prompt = '')
+            """
+        )
 
 
 @contextmanager
 def get_connection() -> Iterator[sqlite3.Connection]:
-    init_db()
     database_path = get_database_path()
     database_path.parent.mkdir(parents=True, exist_ok=True)
 

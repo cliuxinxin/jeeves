@@ -9,6 +9,7 @@ def create_assistant_node(system_prompt: str):
     """
     Creates an assistant node graph function with an injected system prompt.
     """
+
     async def assistant(state: dict[str, Any]) -> dict[str, list[AnyMessage]]:
         llm = get_llm()
         messages = state["messages"]

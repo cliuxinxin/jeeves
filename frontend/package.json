@@ -6,14 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "check": "next typegen && tsc --noEmit"
+    "generate:api": "node scripts/generate-api.mjs",
+    "check": "npm run generate:api && next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.2",
     "@tailwindcss/typography": "^0.5.19",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.511.0",
     "next": "^15.0.0",
+    "openapi-fetch": "^0.14.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
@@ -26,6 +29,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "openapi-typescript": "^7.10.1",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0"
   }

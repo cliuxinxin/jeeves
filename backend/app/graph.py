@@ -1,16 +1,13 @@
-from .graph_config_store import get_active_graph_config
-from .graphs.simple_chat import build_simple_chat_graph
-from .graphs.summary_analysis import build_summary_analysis_graph
+from .graphs.registry import compile_graph, resolve_graph_settings
+from .repositories.graph_configs import get_active_graph_config
+
 
 def get_graph():
-    active_config = get_active_graph_config()
-    if not active_config:
-        return build_simple_chat_graph(system_prompt="")
-        
-    system_prompt = active_config.system_prompt
-    graph_type = active_config.graph_type
-    
-    if graph_type == "summary_analysis":
-        return build_summary_analysis_graph(system_prompt=system_prompt)
-        
-    return build_simple_chat_graph(system_prompt=system_prompt)
+    graph_type, system_prompt, analyzer_prompt, deconstructor_prompt = resolve_graph_settings(
+        get_active_graph_config()
+    )
+    return compile_graph(graph_type, system_prompt, analyzer_prompt, deconstructor_prompt)
+
+
+def invalidate_graph_cache() -> None:
+    compile_graph.cache_clear()

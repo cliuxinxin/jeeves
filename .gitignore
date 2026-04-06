@@ -209,6 +209,8 @@ __marimo__/
 # 依赖库
 node_modules/
 /dist
+!frontend/lib/
+!frontend/lib/**
 
 # Next.js 构建输出
 .next/
@@ -255,5 +257,6 @@ coverage/
 .next-analyze/
 
 # 这里的排除项（如果你使用了 TypeScript）
-tsbuildinfo
+*.tsbuildinfo
+backend/openapi.json
 backend/data/jeeves.db

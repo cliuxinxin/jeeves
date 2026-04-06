@@ -35,7 +35,9 @@ def create_conversation(title: str = "New chat") -> ConversationRecord:
             """,
             (title,),
         )
-        row = connection.execute("SELECT * FROM conversations WHERE id = ?", (int(cursor.lastrowid),)).fetchone()
+        row = connection.execute(
+            "SELECT * FROM conversations WHERE id = ?", (int(cursor.lastrowid),)
+        ).fetchone()
 
     if row is None:
         raise ConversationNotFoundError("Conversation could not be created.")
@@ -74,7 +76,9 @@ def list_conversations() -> list[ConversationSummary]:
 
 def get_conversation(conversation_id: int) -> ConversationRecord:
     with get_connection() as connection:
-        row = connection.execute("SELECT * FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+        row = connection.execute(
+            "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
 
     if row is None:
         raise ConversationNotFoundError(f"Conversation {conversation_id} was not found.")
@@ -83,7 +87,9 @@ def get_conversation(conversation_id: int) -> ConversationRecord:
 
 def get_conversation_messages(conversation_id: int) -> list[ConversationMessageRecord]:
     with get_connection() as connection:
-        exists = connection.execute("SELECT 1 FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+        exists = connection.execute(
+            "SELECT 1 FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
         if exists is None:
             raise ConversationNotFoundError(f"Conversation {conversation_id} was not found.")
 
@@ -102,7 +108,9 @@ def get_conversation_messages(conversation_id: int) -> list[ConversationMessageR
 
 def append_message(conversation_id: int, role: str, content: str) -> ConversationMessageRecord:
     with get_connection() as connection:
-        exists = connection.execute("SELECT title FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+        exists = connection.execute(
+            "SELECT title FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
         if exists is None:
             raise ConversationNotFoundError(f"Conversation {conversation_id} was not found.")
 
@@ -157,9 +165,10 @@ def append_message(conversation_id: int, role: str, content: str) -> Conversatio
 
 def delete_conversation(conversation_id: int) -> None:
     with get_connection() as connection:
-        exists = connection.execute("SELECT 1 FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+        exists = connection.execute(
+            "SELECT 1 FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
         if exists is None:
             raise ConversationNotFoundError(f"Conversation {conversation_id} was not found.")
-        
-        connection.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
 
+        connection.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))

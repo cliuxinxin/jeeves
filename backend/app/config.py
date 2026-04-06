@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     openai_base_url: str | None = None
     openai_temperature: float = 0.2
     openai_max_retries: int = 2
-    cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
     database_path: str = "data/jeeves.db"
 
     @field_validator("cors_origins", mode="before")

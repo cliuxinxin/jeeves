@@ -1,76 +1,152 @@
 # Jeeves
 
-一个最小化但可扩展的全栈 LangGraph AI 助手原型：
+一个可扩展的全栈 LangGraph AI 助手项目：
 
-- `backend/`: Python `FastAPI + LangGraph`
-- `frontend/`: `Next.js + Tailwind + Shadcn 风格组件`
+- `backend/`: `FastAPI + LangGraph + SQLite`
+- `frontend/`: `Next.js 15 + React 19 + TanStack Query`
+- OpenAPI 驱动的前后端类型契约
+- SSE 流式聊天、图配置、模型配置、历史对话与运行状态面板
 
-## 架构
+## 架构概览
 
-前端负责展示与交互，后端负责状态图、模型配置、流式输出和消息持久化：
+当前代码已经按 `api / services / repositories / graphs` 分层：
 
-1. Next.js 使用全屏工作台布局，左侧显示历史对话，主区域展示聊天。
-2. 模型配置被收进一个可打开的设置面板里，目前已有 `模型配置` 分组，后续可以继续扩展更多设置项。
-3. FastAPI 通过 SQLite 持久化 LLM 配置和对话历史。
-4. 聊天请求会读取当前激活配置，并通过 SSE 把模型输出逐段推送给前端。
-5. assistant 回复完成后，用户消息和模型消息都会写回 SQLite。
+- `api`: 定义 HTTP 协议、状态码、请求与响应模型。
+- `services`: 编排聊天、SSE、标题生成、缓存与业务逻辑。
+- `repositories`: 处理 SQLite 访问与持久化。
+- `graphs`: 注册 LangGraph 拓扑、默认 prompt 和编译缓存。
+
+```mermaid
+flowchart LR
+    UI["Next.js Workspace"] --> Hooks["React Query Hooks + API Client"]
+    Hooks --> API["FastAPI API Layer"]
+    API --> Services["Services"]
+    Services --> Graphs["LangGraph Registry / Runtime"]
+    Services --> Repos["Repositories"]
+    Repos --> DB["SQLite"]
+```
 
 ## 目录结构
 
 ```text
 .
 ├── backend
-│   ├── .env.example
 │   ├── app
+│   │   ├── api/
+│   │   ├── graphs/
+│   │   ├── repositories/
+│   │   ├── services/
 │   │   ├── config.py
 │   │   ├── database.py
-│   │   ├── conversation_store.py
 │   │   ├── graph.py
 │   │   ├── llm.py
-│   │   ├── llm_config_store.py
 │   │   ├── main.py
 │   │   ├── messages.py
-│   │   └── schemas.py
+│   │   ├── schemas.py
+│   │   └── telemetry.py
+│   ├── scripts/export_openapi.py
+│   ├── tests/
 │   └── pyproject.toml
 ├── frontend
-│   ├── .env.example
-│   ├── app
-│   │   ├── globals.css
-│   │   ├── layout.tsx
-│   │   ├── not-found.tsx
-│   │   └── page.tsx
-│   ├── components
+│   ├── app/
+│   ├── components/
+│   │   ├── providers/
+│   │   ├── settings/
 │   │   ├── assistant-workspace.tsx
-│   │   ├── chat-assistant.tsx
-│   │   └── ui
-│   ├── lib
+│   │   ├── chat-pane.tsx
+│   │   └── conversation-sidebar.tsx
+│   ├── hooks/
+│   ├── lib/
+│   │   ├── api/
 │   │   ├── api.ts
 │   │   └── utils.ts
+│   ├── scripts/generate-api.mjs
 │   └── package.json
-└── README.md
+└── .github/workflows/ci.yml
 ```
 
-## 启动后端
+## 数据模型
+
+SQLite 当前维护 4 张核心表：
+
+- `llm_configs`: 模型名称、API Key、Base URL、温度、重试次数、激活状态。
+- `graph_configs`: 图类型、系统 prompt、分析 prompt、拆解 prompt、激活状态。
+- `conversations`: 会话标题、创建时间、更新时间。
+- `conversation_messages`: 角色、内容、所属会话、创建时间。
+
+已建立的索引：
+
+- `conversation_messages(conversation_id)`
+- `conversations(updated_at DESC)`
+- `llm_configs(is_active, updated_at DESC)`
+- `graph_configs(is_active, updated_at DESC)`
+
+## API 契约
+
+核心接口如下：
+
+- `GET /api/health`: 返回当前运行状态与已激活模型信息。
+- `GET /api/llm-configs`: 查询模型配置列表。
+- `POST /api/llm-configs`: 创建模型配置。
+- `PUT /api/llm-configs/{config_id}`: 更新模型配置。
+- `POST /api/llm-configs/{config_id}/activate`: 激活模型配置。
+- `POST /api/llm-configs/test`: 测试模型连接。
+- `GET /api/graph-configs`: 查询工作流配置列表。
+- `POST /api/graph-configs/{config_id}/activate`: 激活工作流配置。
+- `GET /api/conversations`: 查询历史对话。
+- `GET /api/conversations/{conversation_id}`: 获取单个会话详情。
+- `POST /api/chat/stream`: SSE 流式聊天。
+- `POST /api/chat`: 非流式聊天接口。
+
+前端类型不再手写：
+
+- FastAPI 通过 `openapi.json` 暴露契约。
+- `frontend/scripts/generate-api.mjs` 调用 `openapi-typescript` 生成 `frontend/lib/api/generated.ts`。
+- `frontend/lib/api/client.ts` 作为统一 API client，供 hooks 使用。
+
+## 流式聊天链路
+
+1. 前端发送 `POST /api/chat/stream`。
+2. 后端先写入用户消息，再发出 `user_message` SSE 事件。
+3. LangGraph 节点输出按 `chunk` 事件逐段返回。
+4. 完成后后端写入最终 assistant 消息，并通过 `done` 事件返回最终消息数组。
+5. 前端只消费持久化后的 `user_message` 和 `done`，不再制造临时 `temp/synced` 消息 ID。
+6. 前后端都支持取消：
+   - 前端用 `AbortController`
+   - 后端在流式过程中检测 `request.is_disconnected()`
+
+## 配置说明
+
+### 后端环境变量
+
+参考 `backend/.env.example`：
+
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `OPENAI_TEMPERATURE`
+- `OPENAI_MAX_RETRIES`
+- `OPENAI_BASE_URL`
+- `CORS_ORIGINS`
+- `DATABASE_PATH`
+
+### 前端环境变量
+
+参考 `frontend/.env.example`：
+
+- `NEXT_PUBLIC_API_URL`
+
+## 本地开发
+
+### 启动后端
 
 ```bash
 cd backend
 cp .env.example .env
-uv sync
+env UV_CACHE_DIR=/tmp/uv-cache uv sync --group dev
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-后端会在 `DATABASE_PATH` 指定的位置自动创建 SQLite 文件，默认是 `backend/data/jeeves.db`。
-其中会保存两类数据：
-
-- 模型配置
-- 对话历史
-
-你有两种方式让模型可用：
-
-1. 打开前端右上角设置，在 `模型配置` 里新建并启用一个 LLM 配置。
-2. 或者继续在 `backend/.env` 中提供 `OPENAI_API_KEY`，作为兜底环境变量配置。
-
-## 启动前端
+### 启动前端
 
 ```bash
 cd frontend
@@ -79,23 +155,52 @@ npm install
 npm run dev
 ```
 
-默认前端会请求 `http://localhost:8000/api/chat`。如果后端地址不同，修改 `frontend/.env.local` 中的 `NEXT_PUBLIC_API_URL`。
+## 检查与测试
 
-## 已实现能力
+### 后端
 
-- LangGraph 状态图封装
-- FastAPI SSE 聊天接口 `POST /api/chat/stream`
-- SQLite 持久化 LLM 配置
-- SQLite 持久化对话历史
-- 配置管理接口：创建、更新、激活、测试连接
-- 全屏工作台布局：历史区 + 聊天区 + 设置面板
-- 前端流式聊天 UI
-- Shadcn 风格基础组件拆分
-- 环境变量与本地开发说明
+```bash
+cd backend
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run pytest
+```
 
-## 下一步建议
+### 前端
 
-- 增加 LangGraph Memory 持久化
-- 把 `/api/chat` 扩展为流式 SSE 或 WebSocket
-- 在图中加入工具节点和路由节点
-- 加入用户会话 ID，支持后端持久化上下文
+```bash
+cd frontend
+npm run check
+npm run build
+```
+
+## 可观测性
+
+后端已经增加结构化日志，覆盖：
+
+- HTTP 请求 ID、状态码和耗时
+- LLM 重试事件
+- 图执行开始/完成
+- SSE 完成、超时和断连
+- 模型配置、图配置、标题生成等审计日志
+
+## 部署说明
+
+推荐最小部署方式：
+
+1. 后端使用 `uvicorn` 或容器部署 FastAPI。
+2. 前端使用 Vercel、Node 服务器或容器部署 Next.js。
+3. 单机原型可继续使用 SQLite。
+4. 如果进入多人或生产环境，建议迁移到 PostgreSQL，并把 LLM Key 改为安全存储方案。
+
+## CI
+
+GitHub Actions 已覆盖：
+
+- 后端 `uv sync --group dev`
+- `ruff format --check`
+- `ruff check`
+- `pytest`
+- 前端 `npm ci`
+- `npm run check`
+- `npm run build`
