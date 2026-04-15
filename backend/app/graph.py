@@ -4,7 +4,11 @@ from .repositories.graph_configs import get_active_graph_config, get_graph_confi
 
 
 def get_graph(graph_config_id: int | None = None):
-    config = get_graph_config(graph_config_id) if graph_config_id is not None else get_active_graph_config()
+    config = (
+        get_graph_config(graph_config_id)
+        if graph_config_id is not None
+        else get_active_graph_config()
+    )
     graph_type, prompt_values = resolve_graph_settings(config)
     return compile_graph(graph_type, prompt_values_cache_key(prompt_values))
 

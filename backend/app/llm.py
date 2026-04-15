@@ -397,5 +397,7 @@ async def test_llm_config(payload: LLMConfigTestRequest) -> str:
         )
     )
     with ai_log_scope(node_name="llm_test", operation="llm_config_test"):
-        response = await llm.ainvoke("Reply with a short confirmation that the configuration works.")
+        response = await llm.ainvoke(
+            "Reply with a short confirmation that the configuration works."
+        )
     return from_langchain_message(response).content

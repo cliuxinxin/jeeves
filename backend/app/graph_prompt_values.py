@@ -104,9 +104,7 @@ def resolve_prompt_values(
         str(normalized.get(PromptConfigField.DECONSTRUCTOR.value, "") or "")
         or str(legacy_values.get(PromptConfigField.DECONSTRUCTOR.value, "") or "")
         or defaults.default_deconstructor_prompt
-        or (
-            resolved_system_prompt if defaults.deconstructor_falls_back_to_system else ""
-        )
+        or (resolved_system_prompt if defaults.deconstructor_falls_back_to_system else "")
     )
 
     if PromptConfigField.SYSTEM.value in allowed_keys:

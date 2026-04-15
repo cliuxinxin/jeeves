@@ -224,7 +224,9 @@ def init_db() -> None:
             """
         ).fetchall():
             raw_prompt_values: dict[str, str] = {}
-            prompt_values_json = row["prompt_values_json"] if "prompt_values_json" in row.keys() else "{}"
+            prompt_values_json = (
+                row["prompt_values_json"] if "prompt_values_json" in row.keys() else "{}"
+            )
             if isinstance(prompt_values_json, str) and prompt_values_json.strip():
                 try:
                     loaded = loads(prompt_values_json)

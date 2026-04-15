@@ -92,7 +92,9 @@ def _fallback_value_routes(text: str) -> list[str]:
         add("contrarian")
     if any(keyword in content for keyword in ("机会", "创业", "产品", "商业", "变现", "增长")):
         add("opportunity")
-    if any(keyword in content for keyword in ("趋势", "信号", "变化", "数据", "市场", "发布", "增速")):
+    if any(
+        keyword in content for keyword in ("趋势", "信号", "变化", "数据", "市场", "发布", "增速")
+    ):
         add("signal")
     if any(keyword in content for keyword in ("标题", "开头", "表达", "写法", "叙事", "文风")):
         add("expression")
