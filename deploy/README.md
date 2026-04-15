@@ -14,13 +14,21 @@
 因为你只能用 Termius 连接，所以这部分你在 Termius 里执行就行。
 我这边不能直接使用 Termius，也不能直接连你的服务器。
 
-推荐在 Ubuntu 上安装 Docker 和 Compose 插件：
+推荐在 Ubuntu 上安装 Docker 和 Compose：
 
 ```bash
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker "$USER"
 newgrp docker
-docker compose version
+docker compose version || docker-compose version
+```
+
+如果这里提示没有 compose，再补装一个：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker-compose-plugin || sudo apt-get install -y docker-compose
+docker compose version || docker-compose version
 ```
 
 然后准备目录并拉代码：
@@ -93,13 +101,13 @@ bash deploy/deploy.sh
 看运行状态：
 
 ```bash
-docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml ps
+docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml ps || docker-compose --env-file deploy/.env.compose -f deploy/docker-compose.yml ps
 ```
 
 看日志：
 
 ```bash
-docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f
+docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f || docker-compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f
 ```
 
 如果一切正常，你就可以通过：
@@ -184,19 +192,19 @@ bash deploy/deploy.sh
 看容器状态：
 
 ```bash
-docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml ps
+docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml ps || docker-compose --env-file deploy/.env.compose -f deploy/docker-compose.yml ps
 ```
 
 看日志：
 
 ```bash
-docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f backend
-docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f frontend
-docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f gateway
+docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f backend || docker-compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f backend
+docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f frontend || docker-compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f frontend
+docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f gateway || docker-compose --env-file deploy/.env.compose -f deploy/docker-compose.yml logs -f gateway
 ```
 
 停止服务：
 
 ```bash
-docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml down
+docker compose --env-file deploy/.env.compose -f deploy/docker-compose.yml down || docker-compose --env-file deploy/.env.compose -f deploy/docker-compose.yml down
 ```

@@ -2,11 +2,14 @@
 
 set -Eeuo pipefail
 
-APP_DIR="${APP_DIR:-/srv/jeeves}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_APP_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+APP_DIR="${APP_DIR:-${DEFAULT_APP_DIR}}"
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 BACKEND_DIR="${APP_DIR}/backend"
 COMPOSE_FILE="${APP_DIR}/deploy/docker-compose.yml"
 COMPOSE_ENV_FILE="${APP_DIR}/deploy/.env.compose"
+COMPOSE_CMD=()
 
 export PATH="${HOME}/.local/bin:${PATH}"
 
@@ -30,14 +33,25 @@ require_command() {
   fi
 }
 
+detect_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker compose)
+    return
+  fi
+
+  if command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose)
+    return
+  fi
+
+  printf 'Missing required command: docker compose or docker-compose\n' >&2
+  exit 1
+}
+
 log "Checking server dependencies"
 require_command git
 require_command docker
-
-if ! docker compose version >/dev/null 2>&1; then
-  printf 'Missing required command: docker compose\n' >&2
-  exit 1
-fi
+detect_compose
 
 require_file "${BACKEND_DIR}/.env"
 require_file "${COMPOSE_FILE}"
@@ -50,12 +64,12 @@ git checkout "${DEPLOY_BRANCH}"
 git pull --ff-only origin "${DEPLOY_BRANCH}"
 
 log "Building Docker images"
-docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" build --pull
+"${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" build --pull
 
 log "Starting containers"
-docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" up -d --remove-orphans
+"${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" up -d --remove-orphans
 
 log "Current container status"
-docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" ps
+"${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" ps
 
 log "Deployment finished"
