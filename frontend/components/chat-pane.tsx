@@ -2,8 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
+  Copy,
+  Download,
   LoaderCircle,
   LogOut,
   PanelRightClose,
@@ -21,6 +24,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { GraphConfigRecord, HealthResponse } from "@/lib/api/client";
+import { copyElementAsImage } from "@/lib/copy-element-as-image";
 import { formatNodeLabel, stageAccentClass } from "@/lib/node-ui";
 import type { StreamedAssistantMessage } from "@/hooks/use-chat-stream";
 import { cn } from "@/lib/utils";
@@ -422,7 +426,11 @@ export function ChatPane({
   isAuthMutating,
 }: ChatPaneProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const insightCardRefs = useRef<Record<string, HTMLElement | null>>({});
   const [expandedMessages, setExpandedMessages] = useState<Record<string, boolean>>({});
+  const [copyState, setCopyState] = useState<
+    Record<string, "idle" | "copying" | "copied" | "downloaded" | "error">
+  >({});
 
   const displayMessages = useMemo(
     () => [...messages, ...streamingMessages],
@@ -455,6 +463,42 @@ export function ChatPane({
       return changed ? next : current;
     });
   }, [displayMessages]);
+
+  async function handleCopyInsightCard(cardKey: string) {
+    const cardElement = insightCardRefs.current[cardKey];
+    if (!cardElement) {
+      setCopyState((current) => ({ ...current, [cardKey]: "error" }));
+      return;
+    }
+
+    setCopyState((current) => ({ ...current, [cardKey]: "copying" }));
+
+    try {
+      const result = await copyElementAsImage(cardElement);
+      setCopyState((current) => ({
+        ...current,
+        [cardKey]: result === "download" ? "downloaded" : "copied",
+      }));
+      window.setTimeout(() => {
+        setCopyState((current) => {
+          if (current[cardKey] !== "copied" && current[cardKey] !== "downloaded") {
+            return current;
+          }
+          return { ...current, [cardKey]: "idle" };
+        });
+      }, 1800);
+    } catch {
+      setCopyState((current) => ({ ...current, [cardKey]: "error" }));
+      window.setTimeout(() => {
+        setCopyState((current) => {
+          if (current[cardKey] !== "error") {
+            return current;
+          }
+          return { ...current, [cardKey]: "idle" };
+        });
+      }, 2200);
+    }
+  }
 
   const modelLabel = runtimeStatus?.configured
     ? `${runtimeStatus.config_name} · ${runtimeStatus.model}`
@@ -677,10 +721,15 @@ export function ChatPane({
                                     const titleMeta = parseInsightTitle(section.title);
                                     const lead = extractLeadQuestion(section.body);
                                     const tone = getInsightTone(titleMeta.category, index);
+                                    const cardKey = `${messageKey}-${index}`;
+                                    const cardCopyState = copyState[cardKey] ?? "idle";
 
                                     return (
                                       <section
                                         key={`${message.id}-${index}`}
+                                        ref={(element) => {
+                                          insightCardRefs.current[cardKey] = element;
+                                        }}
                                         className={cn(
                                           "relative overflow-hidden rounded-[1.55rem] border border-slate-200/80 p-4",
                                           tone.card,
@@ -701,8 +750,40 @@ export function ChatPane({
                                               {titleMeta.heading}
                                             </div>
                                           </div>
-                                          <div className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium", tone.badge)}>
-                                            {titleMeta.badge ?? `卡片 ${index + 1}`}
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => void handleCopyInsightCard(cardKey)}
+                                              disabled={cardCopyState === "copying"}
+                                              data-exclude-from-image="true"
+                                              className={cn(
+                                                "inline-flex items-center gap-1.5 rounded-full border bg-white/90 px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:bg-white disabled:cursor-wait disabled:opacity-70",
+                                                tone.badge,
+                                              )}
+                                              aria-label="复制卡片为图片"
+                                            >
+                                              {cardCopyState === "copying" ? (
+                                                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                                              ) : cardCopyState === "copied" ? (
+                                                <Check className="h-3.5 w-3.5" />
+                                              ) : cardCopyState === "downloaded" ? (
+                                                <Download className="h-3.5 w-3.5" />
+                                              ) : (
+                                                <Copy className="h-3.5 w-3.5" />
+                                              )}
+                                              {cardCopyState === "copying"
+                                                ? "复制中"
+                                                : cardCopyState === "copied"
+                                                  ? "已复制"
+                                                  : cardCopyState === "downloaded"
+                                                    ? "已下载"
+                                                  : cardCopyState === "error"
+                                                    ? "复制失败"
+                                                    : "复制图片"}
+                                            </button>
+                                            <div className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium", tone.badge)}>
+                                              {titleMeta.badge ?? `卡片 ${index + 1}`}
+                                            </div>
                                           </div>
                                         </div>
 
