@@ -1,7 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { LoaderCircle, LogOut, PanelRightClose, PanelRightOpen, Plus, Send, Settings2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  LoaderCircle,
+  LogOut,
+  PanelRightClose,
+  PanelRightOpen,
+  Plus,
+  Send,
+  Settings2,
+} from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -49,8 +59,18 @@ type ChatPaneProps = {
   isAuthMutating?: boolean;
 };
 
+type StateEntry = [string, string];
+
+type InsightCardLayout = {
+  preface: string | null;
+  sections: Array<{
+    title: string;
+    body: string;
+  }>;
+};
+
 function entriesFromStatePatch(statePatch?: Record<string, string>) {
-  return Object.entries(statePatch ?? {}).filter(([, value]) => value);
+  return Object.entries(statePatch ?? {}).filter(([, value]) => value) as StateEntry[];
 }
 
 function normalizeMarkdown(content: string) {
@@ -60,6 +80,234 @@ function normalizeMarkdown(content: string) {
     .replace(/(^|\n)-(?=\S)/g, "$1- ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function normalizeComparableText(content: string) {
+  return normalizeMarkdown(content).replace(/\s+/g, " ").trim();
+}
+
+function isEffectivelySameContent(left: string, right: string) {
+  const normalizedLeft = normalizeComparableText(left);
+  const normalizedRight = normalizeComparableText(right);
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.includes(normalizedRight) ||
+    normalizedRight.includes(normalizedLeft)
+  );
+}
+
+function stripMarkdownInline(text: string) {
+  return text
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_`~]/g, "")
+    .replace(/^#+\s*/gm, "")
+    .trim();
+}
+
+function summarizeText(text: string, maxLength = 160) {
+  const normalized = normalizeComparableText(text);
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength).trimEnd()}...`;
+}
+
+function stripValueRouteFooter(content: string) {
+  return normalizeMarkdown(content).replace(/\n*【价值路由[:：]\s*[\s\S]*?】\s*$/, "").trim();
+}
+
+function parseListValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+    return [];
+  }
+
+  const quotedMatches = Array.from(trimmed.matchAll(/['"]([^'"]+)['"]/g))
+    .map((match) => match[1]?.trim() ?? "")
+    .filter(Boolean);
+
+  if (quotedMatches.length > 0) {
+    return quotedMatches;
+  }
+
+  return trimmed
+    .slice(1, -1)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function filterDisplayStateEntries(entries: StateEntry[], content: string) {
+  const normalizedContent = normalizeComparableText(content);
+  return entries.filter(([key, value]) => {
+    if (key !== "final_output") {
+      return true;
+    }
+    return normalizeComparableText(value) !== normalizedContent;
+  });
+}
+
+function extractInsightCardLayout(content: string): InsightCardLayout | null {
+  const normalized = normalizeMarkdown(content);
+  const headingMatches = Array.from(normalized.matchAll(/^#{2,6}\s+(.+)$/gm));
+
+  if (headingMatches.length < 2) {
+    return null;
+  }
+
+  const sections = headingMatches
+    .map((match, index) => {
+      const sectionStart = match.index ?? 0;
+      const bodyStart = sectionStart + match[0].length;
+      const nextHeadingStart = headingMatches[index + 1]?.index ?? normalized.length;
+      return {
+        title: stripMarkdownInline(match[1] ?? ""),
+        body: normalized.slice(bodyStart, nextHeadingStart).trim(),
+      };
+    })
+    .filter((section) => section.title && section.body);
+
+  const insightSections = sections.filter((section) => /洞察卡片|卡片\s*\d+/i.test(section.title));
+  if (insightSections.length < 2) {
+    return null;
+  }
+
+  const firstHeadingIndex = headingMatches[0]?.index ?? 0;
+  const preface = normalized.slice(0, firstHeadingIndex).trim();
+
+  return {
+    preface: preface || null,
+    sections: insightSections,
+  };
+}
+
+function parseInsightTitle(title: string) {
+  const normalizedTitle = stripMarkdownInline(title);
+  const match = normalizedTitle.match(/^(?:洞察)?卡片\s*(\d+)\s*[：:]\s*(.+)$/);
+  const badge = match ? `卡片 ${match[1]}` : null;
+  const titleBody = match ? match[2] : normalizedTitle;
+
+  const segments = titleBody.split(/[：:]/).map((segment) => segment.trim()).filter(Boolean);
+  if (segments.length >= 2 && segments[0] && segments[0].length <= 12) {
+    return {
+      badge,
+      category: segments[0],
+      heading: segments.slice(1).join("："),
+    };
+  }
+
+  return {
+    badge,
+    category: null,
+    heading: titleBody,
+  };
+}
+
+function extractLeadQuestion(content: string) {
+  const normalized = normalizeMarkdown(content);
+  const boldMatch = normalized.match(/^\*\*(.+?[？?])\*\*\s*\n+([\s\S]+)$/);
+  if (boldMatch) {
+    return {
+      question: stripMarkdownInline(boldMatch[1] ?? ""),
+      content: boldMatch[2]?.trim() ?? "",
+    };
+  }
+
+  const plainMatch = normalized.match(/^(.{1,40}[？?])\s*\n+([\s\S]+)$/);
+  if (plainMatch) {
+    return {
+      question: stripMarkdownInline(plainMatch[1] ?? ""),
+      content: plainMatch[2]?.trim() ?? "",
+    };
+  }
+
+  return {
+    question: null,
+    content: normalized,
+  };
+}
+
+function getInsightTone(category: string | null, index: number) {
+  const normalizedCategory = (category ?? "").trim();
+
+  if (/信号|趋势|市场/.test(normalizedCategory)) {
+    return {
+      card: "bg-gradient-to-br from-sky-50/95 via-white to-cyan-50/60",
+      bar: "bg-gradient-to-r from-sky-400 via-cyan-400 to-blue-500",
+      pill: "border border-sky-200 bg-sky-100/90 text-sky-800",
+      question: "border border-sky-200/80 bg-sky-50/85 text-sky-900",
+      badge: "border border-sky-200/80 bg-white/90 text-sky-700",
+      shadow: "shadow-[0_14px_34px_rgba(14,165,233,0.08)]",
+    };
+  }
+
+  if (/框架|路径|方法|部署|模型/.test(normalizedCategory)) {
+    return {
+      card: "bg-gradient-to-br from-amber-50/95 via-white to-orange-50/50",
+      bar: "bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500",
+      pill: "border border-amber-200 bg-amber-100/90 text-amber-800",
+      question: "border border-amber-200/80 bg-amber-50/85 text-amber-900",
+      badge: "border border-amber-200/80 bg-white/90 text-amber-700",
+      shadow: "shadow-[0_14px_34px_rgba(245,158,11,0.08)]",
+    };
+  }
+
+  if (/反常识|观点|风险|提醒|警报/.test(normalizedCategory)) {
+    return {
+      card: "bg-gradient-to-br from-rose-50/95 via-white to-fuchsia-50/45",
+      bar: "bg-gradient-to-r from-rose-400 via-pink-400 to-fuchsia-500",
+      pill: "border border-rose-200 bg-rose-100/90 text-rose-800",
+      question: "border border-rose-200/80 bg-rose-50/85 text-rose-900",
+      badge: "border border-rose-200/80 bg-white/90 text-rose-700",
+      shadow: "shadow-[0_14px_34px_rgba(244,63,94,0.08)]",
+    };
+  }
+
+  return [
+    {
+      card: "bg-gradient-to-br from-slate-50/95 via-white to-slate-100/60",
+      bar: "bg-gradient-to-r from-slate-400 via-slate-500 to-slate-600",
+      pill: "border border-slate-200 bg-slate-100/90 text-slate-700",
+      question: "border border-slate-200/80 bg-slate-50/90 text-slate-800",
+      badge: "border border-slate-200/80 bg-white/90 text-slate-600",
+      shadow: "shadow-[0_14px_34px_rgba(15,23,42,0.06)]",
+    },
+    {
+      card: "bg-gradient-to-br from-emerald-50/95 via-white to-teal-50/50",
+      bar: "bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-500",
+      pill: "border border-emerald-200 bg-emerald-100/90 text-emerald-800",
+      question: "border border-emerald-200/80 bg-emerald-50/85 text-emerald-900",
+      badge: "border border-emerald-200/80 bg-white/90 text-emerald-700",
+      shadow: "shadow-[0_14px_34px_rgba(16,185,129,0.08)]",
+    },
+  ][index % 2];
+}
+
+function buildCollapsedPreview(options: {
+  insightLayout: InsightCardLayout | null;
+  routeReasonText: string;
+  valueRoutes: string[];
+}) {
+  if (options.insightLayout && options.insightLayout.sections.length > 0) {
+    const first = parseInsightTitle(options.insightLayout.sections[0].title);
+    return `${options.insightLayout.sections.length} 张卡片 · ${first.heading}`;
+  }
+
+  if (options.routeReasonText) {
+    return summarizeText(options.routeReasonText, 90);
+  }
+
+  if (options.valueRoutes.length > 0) {
+    return options.valueRoutes.join(" · ");
+  }
+
+  return null;
 }
 
 const markdownComponents: Components = {
@@ -132,6 +380,24 @@ const markdownComponents: Components = {
   hr: (props) => <hr className="my-5 border-slate-200" {...props} />,
 };
 
+function MarkdownBlock({ content, className }: { content: string; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "prose prose-sm max-w-none text-slate-700",
+        "prose-headings:font-inherit prose-headings:text-inherit",
+        "prose-p:my-2.5 prose-p:leading-7 prose-li:leading-7 prose-strong:text-slate-950 prose-ul:my-3 prose-ol:my-3",
+        "prose-code:before:content-none prose-code:after:content-none",
+        className,
+      )}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
+        {normalizeMarkdown(content)}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 export function ChatPane({
   title,
   runtimeStatus,
@@ -156,6 +422,7 @@ export function ChatPane({
   isAuthMutating,
 }: ChatPaneProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const [expandedMessages, setExpandedMessages] = useState<Record<string, boolean>>({});
 
   const displayMessages = useMemo(
     () => [...messages, ...streamingMessages],
@@ -167,6 +434,27 @@ export function ChatPane({
     if (!viewport) return;
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
   }, [displayMessages, isSending]);
+
+  useEffect(() => {
+    setExpandedMessages((current) => {
+      let changed = false;
+      const next = { ...current };
+
+      for (const message of displayMessages) {
+        if (message.role !== "assistant" || !message.node) {
+          continue;
+        }
+
+        const key = String(message.id);
+        if (!(key in next)) {
+          next[key] = message.node !== "value_router";
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [displayMessages]);
 
   const modelLabel = runtimeStatus?.configured
     ? `${runtimeStatus.config_name} · ${runtimeStatus.model}`
@@ -244,58 +532,206 @@ export function ChatPane({
                   key={message.id}
                   className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}
                 >
-                  <div
-                    className={cn(
-                      "max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-6",
-                      message.role === "user"
-                        ? "max-h-96 overflow-y-auto bg-slate-950 text-white"
-                        : cn(
-                            "border border-slate-200 text-slate-700",
-                            message.node ? "border-l-4" : null,
-                            message.node ? stageAccentClass(message.node) : "bg-slate-50",
-                            message.node === "analyzer" ? "py-2" : null,
-                          ),
-                    )}
-                  >
-                    {message.role === "assistant" ? (
+                  {(() => {
+                    const stateEntries = entriesFromStatePatch(message.state_patch);
+                    const visibleStateEntries = filterDisplayStateEntries(stateEntries, message.content);
+                    const valueRouteEntry = visibleStateEntries.find(([key]) => key === "value_routes");
+                    const routeReasonEntry = visibleStateEntries.find(([key]) => key === "route_reason");
+                    const routeReasonText = routeReasonEntry?.[1] ?? "";
+                    const valueRoutes = valueRouteEntry ? parseListValue(valueRouteEntry[1]) : [];
+                    const extraStateEntries = visibleStateEntries.filter(
+                      ([key]) => key !== "value_routes" && key !== "route_reason",
+                    );
+                    const insightLayout =
+                      message.role === "assistant" ? extractInsightCardLayout(message.content) : null;
+                    const cleanedContent = stripValueRouteFooter(message.content);
+                    const hideAnalyzerBody =
+                      message.node === "value_router" &&
+                      Boolean(routeReasonText) &&
+                      isEffectivelySameContent(cleanedContent, routeReasonText);
+                    const messageKey = String(message.id);
+                    const isCollapsible =
+                      message.role === "assistant" &&
+                      Boolean(message.node) &&
+                      (Boolean(insightLayout) || (!hideAnalyzerBody && Boolean(cleanedContent)));
+                    const isExpanded = expandedMessages[messageKey] ?? (message.node !== "value_router");
+                    const collapsedPreview = buildCollapsedPreview({
+                      insightLayout,
+                      routeReasonText,
+                      valueRoutes,
+                    });
+
+                    return (
                       <div
                         className={cn(
-                          "prose prose-sm max-w-none text-slate-700",
-                          "prose-headings:font-inherit prose-headings:text-inherit",
-                          "prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0",
-                          "prose-code:before:content-none prose-code:after:content-none",
+                          "max-w-[92%] rounded-3xl px-4 py-3 text-sm leading-6 xl:max-w-[86%]",
+                          message.role === "user"
+                            ? "max-h-96 overflow-y-auto bg-slate-950 text-white"
+                            : cn(
+                                "border border-slate-200 text-slate-700 shadow-[0_12px_36px_rgba(15,23,42,0.05)]",
+                                message.node ? "border-l-4" : null,
+                                message.node ? stageAccentClass(message.node) : "bg-slate-50",
+                                message.node === "analyzer" ? "py-2" : null,
+                              ),
                         )}
                       >
-                        {message.node ? (
-                          <div className="not-prose mb-2 flex items-center justify-between gap-3">
-                            <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur">
-                              {formatNodeLabel(message.node, message.node_label)}
-                            </div>
-                          </div>
-                        ) : null}
-                        {entriesFromStatePatch(message.state_patch).length > 0 ? (
-                          <div className="not-prose mb-3 rounded-2xl border border-slate-200 bg-white/85 p-3">
-                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                              State Writes
-                            </div>
-                            <div className="space-y-2">
-                              {entriesFromStatePatch(message.state_patch).map(([key, value]) => (
-                                <div key={key} className="grid gap-1 text-xs text-slate-700 sm:grid-cols-[7rem_minmax(0,1fr)]">
-                                  <div className="font-semibold text-slate-500">{key}</div>
-                                  <div className="whitespace-pre-wrap break-words">{value}</div>
+                        {message.role === "assistant" ? (
+                          <div>
+                            {message.node ? (
+                              <div className="mb-3 flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur">
+                                    {formatNodeLabel(message.node, message.node_label)}
+                                  </div>
+                                  {isCollapsible && !isExpanded && collapsedPreview ? (
+                                    <p className="mt-2 line-clamp-2 max-w-[56ch] text-xs leading-5 text-slate-500">
+                                      {collapsedPreview}
+                                    </p>
+                                  ) : null}
                                 </div>
-                              ))}
-                            </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  {insightLayout ? (
+                                    <div className="inline-flex items-center rounded-full bg-slate-900/5 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                                      {insightLayout.sections.length} 张卡片
+                                    </div>
+                                  ) : null}
+                                  {isCollapsible ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpandedMessages((current) => ({
+                                          ...current,
+                                          [messageKey]: !isExpanded,
+                                        }))
+                                      }
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/85 text-slate-500 transition hover:bg-white hover:text-slate-700"
+                                      aria-label={isExpanded ? "折叠阶段内容" : "展开阶段内容"}
+                                    >
+                                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {valueRoutes.length > 0 || routeReasonEntry || extraStateEntries.length > 0 ? (
+                              <div className="mb-4 rounded-[1.35rem] border border-white/80 bg-white/88 p-3 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+                                {valueRoutes.length > 0 ? (
+                                  <div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                      价值路由
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {valueRoutes.map((route) => (
+                                        <span
+                                          key={route}
+                                          className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700"
+                                        >
+                                          {route}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
+
+                                {routeReasonEntry ? (
+                                  <div className={cn(valueRoutes.length > 0 ? "mt-3 border-t border-slate-200/80 pt-3" : null)}>
+                                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                      路由说明
+                                    </div>
+                                    <p className="mt-2 max-w-[78ch] text-[13px] leading-6 text-slate-600">
+                                      {summarizeText(routeReasonText, 220)}
+                                    </p>
+                                  </div>
+                                ) : null}
+
+                                {extraStateEntries.length > 0 ? (
+                                  <details className={cn("rounded-xl bg-slate-50/85 px-3 py-2", valueRoutes.length > 0 || routeReasonEntry ? "mt-3" : null)}>
+                                    <summary className="cursor-pointer list-none text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                      查看状态写入
+                                    </summary>
+                                    <div className="mt-3 space-y-2">
+                                      {extraStateEntries.map(([key, value]) => (
+                                        <div key={key} className="grid gap-1 text-xs text-slate-700 sm:grid-cols-[7rem_minmax(0,1fr)]">
+                                          <div className="font-semibold text-slate-500">{key}</div>
+                                          <div className="whitespace-pre-wrap break-words">{summarizeText(value, 280)}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                ) : null}
+                              </div>
+                            ) : null}
+
+                            {isCollapsible && !isExpanded ? null : insightLayout ? (
+                              <div className="space-y-4">
+                                {insightLayout.preface ? (
+                                  <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-4 py-3">
+                                    <div className="max-w-[78ch]">
+                                      <MarkdownBlock content={insightLayout.preface} />
+                                    </div>
+                                  </div>
+                                ) : null}
+                                <div className="grid gap-3">
+                                  {insightLayout.sections.map((section, index) => {
+                                    const titleMeta = parseInsightTitle(section.title);
+                                    const lead = extractLeadQuestion(section.body);
+                                    const tone = getInsightTone(titleMeta.category, index);
+
+                                    return (
+                                      <section
+                                        key={`${message.id}-${index}`}
+                                        className={cn(
+                                          "relative overflow-hidden rounded-[1.55rem] border border-slate-200/80 p-4",
+                                          tone.card,
+                                          tone.shadow,
+                                        )}
+                                      >
+                                        <div className={cn("absolute inset-x-0 top-0 h-1.5", tone.bar)} />
+                                        <div className="mb-4 flex items-start justify-between gap-3">
+                                          <div className="space-y-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              {titleMeta.category ? (
+                                                <div className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", tone.pill)}>
+                                                  {titleMeta.category}
+                                                </div>
+                                              ) : null}
+                                            </div>
+                                            <div className="max-w-[72ch] text-[22px] leading-tight font-semibold tracking-tight text-slate-950">
+                                              {titleMeta.heading}
+                                            </div>
+                                          </div>
+                                          <div className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium", tone.badge)}>
+                                            {titleMeta.badge ?? `卡片 ${index + 1}`}
+                                          </div>
+                                        </div>
+
+                                        {lead.question ? (
+                                          <div className={cn("mb-4 rounded-2xl px-3 py-2 text-sm font-medium", tone.question)}>
+                                            {lead.question}
+                                          </div>
+                                        ) : null}
+
+                                        <div className="max-w-[78ch]">
+                                          <MarkdownBlock content={lead.content} />
+                                        </div>
+                                      </section>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : hideAnalyzerBody ? null : (
+                              <div className="max-w-[78ch]">
+                                <MarkdownBlock content={cleanedContent} />
+                              </div>
+                            )}
                           </div>
-                        ) : null}
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
-                          {normalizeMarkdown(message.content)}
-                        </ReactMarkdown>
+                        ) : (
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                        )}
                       </div>
-                    ) : (
-                      <p className="whitespace-pre-wrap">{message.content}</p>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
               ))}
 
