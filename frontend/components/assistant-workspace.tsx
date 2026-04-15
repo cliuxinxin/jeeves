@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ChatPane, type ChatPaneMessage } from "@/components/chat-pane";
 import { ConversationSidebar } from "@/components/conversation-sidebar";
+import { RunTracePanel } from "@/components/run-trace-panel";
 import { SettingsDrawer } from "@/components/settings/settings-drawer";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useConversations } from "@/hooks/use-conversations";
@@ -11,13 +12,24 @@ import { useGraphConfigs } from "@/hooks/use-graph-configs";
 import { useLLMConfigs } from "@/hooks/use-llm-configs";
 import { useRuntimeStatus } from "@/hooks/use-runtime-status";
 
-type SettingsSection = "model" | "graph";
+type SettingsSection = "model" | "graph" | "logs";
 
-export default function AssistantWorkspace() {
+type AssistantWorkspaceProps = {
+  authUsername?: string | null;
+  onLogout?: () => void;
+  isAuthMutating?: boolean;
+};
+
+export default function AssistantWorkspace({
+  authUsername,
+  onLogout,
+  isAuthMutating,
+}: AssistantWorkspaceProps) {
   const [input, setInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("model");
   const [chatError, setChatError] = useState<string | null>(null);
+  const [traceOpen, setTraceOpen] = useState(false);
 
   const runtimeStatusQuery = useRuntimeStatus();
   const conversations = useConversations();
@@ -38,12 +50,17 @@ export default function AssistantWorkspace() {
         content: message.content,
         created_at: message.created_at,
         node: "node" in message ? (message as ChatPaneMessage).node : undefined,
+        node_label: "node_label" in message ? (message as ChatPaneMessage).node_label : undefined,
+        state_patch: "state_patch" in message ? (message as ChatPaneMessage).state_patch : undefined,
       })),
     [conversations.activeConversationMessages],
   );
 
   const combinedChatError = chatStream.error ?? chatError;
-  const activeGraphId = graphConfigs.activeConfigId;
+  const activeGraphId =
+    conversations.activeConversationDetail?.conversation.graph_config_id ??
+    conversations.activeConversation?.graph_config_id ??
+    graphConfigs.activeConfigId;
 
   async function handleSend() {
     const trimmed = input.trim();
@@ -57,7 +74,9 @@ export default function AssistantWorkspace() {
     let conversationId = conversations.activeConversationId;
     if (conversationId === null) {
       try {
-        const createdConversation = await conversations.createNewConversation();
+        const createdConversation = await conversations.createNewConversation({
+          graph_config_id: activeGraphId ?? undefined,
+        });
         conversationId = createdConversation.id;
       } catch (error) {
         setChatError(error instanceof Error ? error.message : "创建对话失败。");
@@ -76,7 +95,9 @@ export default function AssistantWorkspace() {
   async function handleCreateConversation() {
     try {
       setChatError(null);
-      const createdConversation = await conversations.createNewConversation();
+      const createdConversation = await conversations.createNewConversation({
+        graph_config_id: activeGraphId ?? undefined,
+      });
       conversations.setActiveConversationId(createdConversation.id);
     } catch (error) {
       setChatError(error instanceof Error ? error.message : "创建对话失败。");
@@ -94,7 +115,14 @@ export default function AssistantWorkspace() {
 
   async function handleActivateGraphFromChat(configId: number) {
     try {
-      await graphConfigs.activateConfig(configId);
+      if (conversations.activeConversationId === null) {
+        const createdConversation = await conversations.createNewConversation({
+          graph_config_id: configId,
+        });
+        conversations.setActiveConversationId(createdConversation.id);
+      } else {
+        await conversations.updateConversationConfig(conversations.activeConversationId, configId);
+      }
       setChatError(null);
     } catch (error) {
       setChatError(error instanceof Error ? error.message : "切换工作流失败。");
@@ -117,24 +145,41 @@ export default function AssistantWorkspace() {
       />
 
       <section className="min-h-0 flex-1 p-4">
-        <ChatPane
-          title={conversations.activeConversation?.title ?? "New chat"}
-          runtimeStatus={runtimeStatusQuery.data ?? null}
-          graphConfigs={graphConfigs.configs}
-          activeGraphId={activeGraphId}
-          messages={messages}
-          streamingMessages={chatStream.streamingMessages}
-          input={input}
-          error={combinedChatError}
-          isBootstrapping={conversations.isBootstrapping || runtimeStatusQuery.isLoading}
-          isConversationLoading={conversations.isConversationLoading}
-          isSending={chatStream.isSending}
-          onInputChange={setInput}
-          onSend={() => void handleSend()}
-          onNewConversation={() => void handleCreateConversation()}
-          onOpenSettings={() => openSettings("model")}
-          onActivateGraphConfig={(configId) => void handleActivateGraphFromChat(configId)}
-        />
+        <div className="flex h-full min-h-0 flex-col gap-4 xl:flex-row">
+          <div className="min-h-0 min-w-0 flex-1">
+            <ChatPane
+              title={conversations.activeConversation?.title ?? "New chat"}
+              runtimeStatus={runtimeStatusQuery.data ?? null}
+              graphConfigs={graphConfigs.configs}
+              activeGraphId={activeGraphId}
+              messages={messages}
+              streamingMessages={chatStream.streamingMessages}
+              input={input}
+              error={combinedChatError}
+              isBootstrapping={conversations.isBootstrapping || runtimeStatusQuery.isLoading}
+              isConversationLoading={conversations.isConversationLoading}
+              isSending={chatStream.isSending}
+              onInputChange={setInput}
+              onSend={() => void handleSend()}
+              onNewConversation={() => void handleCreateConversation()}
+              onOpenSettings={() => openSettings("model")}
+              onToggleTrace={() => setTraceOpen((current) => !current)}
+              onActivateGraphConfig={(configId) => void handleActivateGraphFromChat(configId)}
+              isTraceOpen={traceOpen}
+              authUsername={authUsername}
+              onLogout={onLogout}
+              isAuthMutating={isAuthMutating}
+            />
+          </div>
+
+          {traceOpen ? (
+            <RunTracePanel
+              activeConversationId={conversations.activeConversationId}
+              activeConversationTitle={conversations.activeConversation?.title ?? null}
+              onClose={() => setTraceOpen(false)}
+            />
+          ) : null}
+        </div>
       </section>
 
       <SettingsDrawer
@@ -156,6 +201,8 @@ export default function AssistantWorkspace() {
         onTestModelConfig={llmConfigs.testConfig}
         graphConfigs={graphConfigs.configs}
         activeGraphConfigId={graphConfigs.activeConfigId}
+        activeConversationId={conversations.activeConversationId}
+        activeConversationTitle={conversations.activeConversation?.title ?? null}
         isGraphLoading={graphConfigs.configsQuery.isLoading}
         isGraphSaving={graphConfigs.isSaving}
         graphActivatingId={graphConfigs.activatingId}

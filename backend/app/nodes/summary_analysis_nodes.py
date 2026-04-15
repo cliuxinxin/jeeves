@@ -1,60 +1,16 @@
 import re
 from typing import Any
 
-import httpx
-from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage, SystemMessage
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
+from ..ai_logging import ai_log_scope
 from ..llm import get_llm
-
-TYPE_FOCUS_MAP = {
-    "健康科普/公共安全新闻": [
-        "潜在风险",
-        "成因或致病原理",
-        "预防措施",
-        "急救或应对建议",
-        "易忽视的注意事项",
-    ],
-    "财经/商业新闻": [
-        "核心经营数据",
-        "市场竞争影响",
-        "投资风险提示",
-        "后续趋势判断",
-        "对行业格局的意义",
-    ],
-    "科技/互联网新闻": ["核心技术创新点", "应用场景", "行业落地价值", "技术局限性", "未来演进方向"],
-    "政策/时事新闻": ["政策背景", "核心条款解读", "受影响群体", "执行要求", "现实影响与约束"],
-    "教程/操作指南": ["前置条件", "核心步骤逻辑", "关键配置项", "常见报错排查", "最佳实践建议"],
-    "综合文章": ["核心观点", "支撑事实", "逻辑结构", "风险或争议点", "总结性建议"],
-}
-
-
-DECONSTRUCTOR_MARKDOWN_GUIDE = """
-输出排版要求（必须遵守）：
-1. 全文使用规范 Markdown。
-2. 开头使用一个 `##` 总标题，不要使用 `#` 一级标题。
-3. 后续分节统一使用 `###` 小标题。
-4. 标题、段落、列表、代码块之间必须空一行。
-5. 列表统一使用 `- `，不要使用 `·`、`•` 或把多个要点挤在同一段。
-6. 每个段落控制在 2-3 句内，每个列表项控制在 1-2 句内。
-7. 仅对命令、字段、路径、产品名使用反引号，不要整段加粗。
-8. 不要把标题或列表标记接在正文同一行。
-""".strip()
-
-DECONSTRUCTOR_PROFESSIONAL_GUIDE = """
-专业分析增强要求：
-1. 先输出 `## 核心结论`，用 2-3 条列表提炼最重要的信息。
-2. 再输出 `## 关键信号`，尽量区分“事实信息 / 分析判断 / 风险与不确定性”。
-3. 然后进入 `## 深度拆解`，结合文章类型使用 `###` 小标题展开。
-4. 结尾输出 `## 信息价值`，说明这篇文章对读者、业务、行业或执行层面的实际意义。
-5. 如果原文信息不足，不要硬推断，明确写出“原文未提供”。
-""".strip()
+from ..messages import extract_text_content
+from ..node_runs import build_node_update
+from ..prompt_compiler import (
+    compile_summary_analyzer_prompt,
+    compile_summary_deconstructor_prompt,
+)
 
 
 def _guess_article_type(text: str) -> str:
@@ -128,10 +84,6 @@ def _guess_article_type(text: str) -> str:
     return "综合文章"
 
 
-def _focus_areas_for_article_type(article_type: str) -> list[str]:
-    return TYPE_FOCUS_MAP.get(article_type, TYPE_FOCUS_MAP["综合文章"])
-
-
 def _condense_classification_reason(text: str, article_type: str) -> str:
     cleaned = re.sub(r"\s*【文章类型[:：]\s*.*?】\s*$", "", text, flags=re.S).strip()
     if not cleaned:
@@ -145,21 +97,6 @@ def _condense_classification_reason(text: str, article_type: str) -> str:
     return summary
 
 
-def _build_routing_brief(article_type: str, classification_reason: str) -> str:
-    focus_areas = "、".join(_focus_areas_for_article_type(article_type))
-    reason = classification_reason or f"文本的表达重心更接近“{article_type}”。"
-    return (
-        "二阶段路由信息：\n"
-        f"- 文章类型：{article_type}\n"
-        f"- 分类依据：{reason}\n"
-        f"- 建议优先拆解：{focus_areas}\n\n"
-        "协作要求：\n"
-        "1. 将以上路由信息视为拆解优先级参考，不要机械复述。\n"
-        "2. 若路由信息与原文细节冲突，以原文事实为准。\n"
-        "3. 输出时优先提供对读者真正有用的判断、风险和价值。"
-    )
-
-
 def create_deconstructor_node(base_system_prompt: str):
     """
     Creates a deconstructor node that analyzes the article.
@@ -170,20 +107,10 @@ def create_deconstructor_node(base_system_prompt: str):
         messages = state["messages"]
         article_type = state.get("article_type", "综合文章")
         classification_reason = state.get("classification_reason", "")
-
-        # Use user-configured prompt as the primary instruction source.
-        # Supports `{article_type}` placeholder replacement.
-        system_prompt = (base_system_prompt or "").strip()
-        if not system_prompt:
-            system_prompt = "请根据用户输入做拆解分析，条理清晰，分点输出。"
-
-        system_prompt = system_prompt.replace("{article_type}", article_type)
-        routing_brief = _build_routing_brief(article_type, classification_reason)
-        system_prompt = (
-            f"{system_prompt}\n\n"
-            f"{routing_brief}\n\n"
-            f"{DECONSTRUCTOR_MARKDOWN_GUIDE}\n\n"
-            f"{DECONSTRUCTOR_PROFESSIONAL_GUIDE}"
+        system_prompt = compile_summary_deconstructor_prompt(
+            base_system_prompt,
+            article_type=article_type,
+            classification_reason=classification_reason,
         )
 
         # The latest AI message belongs to the analyzer node. We convert its value
@@ -193,20 +120,15 @@ def create_deconstructor_node(base_system_prompt: str):
             messages[:-1] if messages and isinstance(messages[-1], AIMessage) else messages
         )
 
-        @retry(
-            wait=wait_exponential(multiplier=1, min=4, max=10),
-            stop=stop_after_attempt(5),
-            retry=(
-                retry_if_exception_type(httpx.HTTPStatusError)
-                | retry_if_exception_type(OutputParserException)
-            ),
-            reraise=True,
+        with ai_log_scope(node_name="deconstructor", operation="graph_node"):
+            response = await llm.ainvoke([SystemMessage(content=system_prompt)] + llm_messages)
+        output = extract_text_content(getattr(response, "content", "")) or "模型返回了空响应。"
+        return build_node_update(
+            node="deconstructor",
+            output=output,
+            state_update={"final_output": output},
+            final_output=output,
         )
-        async def _ainvoke_with_retries():
-            return await llm.ainvoke([SystemMessage(content=system_prompt)] + llm_messages)
-
-        response = await _ainvoke_with_retries()
-        return {"messages": [response]}
 
     return deconstructor
 
@@ -220,26 +142,11 @@ def create_analyzer_node(base_system_prompt: str):
         llm = get_llm()
         messages = state["messages"]
         latest = str(getattr(messages[-1], "content", "") or "") if messages else ""
+        system_prompt = compile_summary_analyzer_prompt(base_system_prompt)
 
-        # Use user-configured prompt as the primary instruction source.
-        system_prompt = (base_system_prompt or "").strip()
-        if not system_prompt:
-            system_prompt = "你是一个专业的文本分类器。请阅读用户输入，判定文章类型，并在结尾严格输出：【文章类型：XXX】。"
-
-        @retry(
-            wait=wait_exponential(multiplier=1, min=4, max=10),
-            stop=stop_after_attempt(5),
-            retry=(
-                retry_if_exception_type(httpx.HTTPStatusError)
-                | retry_if_exception_type(OutputParserException)
-            ),
-            reraise=True,
-        )
-        async def _ainvoke_with_retries():
-            return await llm.ainvoke([SystemMessage(content=system_prompt)] + messages)
-
-        result = await _ainvoke_with_retries()
-        text = str(getattr(result, "content", "") or "")
+        with ai_log_scope(node_name="analyzer", operation="graph_node"):
+            result = await llm.ainvoke([SystemMessage(content=system_prompt)] + messages)
+        text = extract_text_content(getattr(result, "content", ""), strip=False)
 
         match = re.search(r"【文章类型[:：]\s*(.*?)】", text)
         article_type = match.group(1).strip() if match else _guess_article_type(latest)
@@ -249,10 +156,13 @@ def create_analyzer_node(base_system_prompt: str):
         if not content:
             content = f"判定文章类型为：【{article_type}】。\n【文章类型：{article_type}】"
 
-        return {
-            "article_type": article_type,
-            "classification_reason": classification_reason,
-            "messages": [AIMessage(content=content)],
-        }
+        return build_node_update(
+            node="analyzer",
+            output=content,
+            state_update={
+                "article_type": article_type,
+                "classification_reason": classification_reason,
+            },
+        )
 
     return analyzer

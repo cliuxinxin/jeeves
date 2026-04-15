@@ -5,12 +5,17 @@ import { API_URL } from "@/lib/api";
 import type { components, paths } from "./generated";
 
 export type GraphType = components["schemas"]["GraphType"];
+export type AuthLoginRequest = components["schemas"]["AuthLoginRequest"];
+export type AuthSessionResponse = components["schemas"]["AuthSessionResponse"];
+export type AILogStatus = components["schemas"]["AILogStatus"];
 export type HealthResponse = components["schemas"]["HealthResponse"];
 export type ConversationSummary = components["schemas"]["ConversationSummary"];
 export type ConversationRecord = components["schemas"]["ConversationRecord"];
 export type ConversationMessageRecord = components["schemas"]["ConversationMessageRecord"];
 export type ConversationDetailResponse = components["schemas"]["ConversationDetailResponse"];
 export type ConversationListResponse = components["schemas"]["ConversationListResponse"];
+export type ConversationCreateRequest = components["schemas"]["ConversationCreateRequest"];
+export type ConversationUpdateRequest = components["schemas"]["ConversationUpdateRequest"];
 export type ChatRequest = components["schemas"]["ChatRequest"];
 export type ChatResponse = components["schemas"]["ChatResponse"];
 export type ChatStreamRequest = components["schemas"]["ChatStreamRequest"];
@@ -24,13 +29,24 @@ export type GraphConfigRecord = components["schemas"]["GraphConfigRecord"];
 export type GraphConfigCreateRequest = components["schemas"]["GraphConfigCreateRequest"];
 export type GraphConfigUpdateRequest = components["schemas"]["GraphConfigUpdateRequest"];
 export type GraphConfigListResponse = components["schemas"]["GraphConfigListResponse"];
+export type GraphPromptPreviewRequest = components["schemas"]["GraphPromptPreviewRequest"];
+export type GraphNodePromptPreview = components["schemas"]["GraphNodePromptPreview"];
+export type GraphStateSlotPreview = components["schemas"]["GraphStateSlotPreview"];
+export type GraphPromptFieldPreview = components["schemas"]["GraphPromptFieldPreview"];
+export type GraphPromptPreviewResponse = components["schemas"]["GraphPromptPreviewResponse"];
+export type AILogMessage = components["schemas"]["AILogMessage"];
+export type AILogRecord = components["schemas"]["AILogRecord"];
+export type AILogListResponse = components["schemas"]["AILogListResponse"];
 
 type OpenApiResult<T> = {
   data?: T;
   error?: unknown;
 };
 
-const client = createClient<paths>({ baseUrl: API_URL });
+const client = createClient<paths>({
+  baseUrl: API_URL,
+  fetch: (request: Request) => fetch(new Request(request, { credentials: "include" })),
+});
 
 function extractErrorMessage(error: unknown): string | null {
   if (!error || typeof error !== "object") {
@@ -63,6 +79,18 @@ export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return unwrap(client.GET("/api/health", { signal }), "加载运行状态失败。");
 }
 
+export async function getAuthSession(signal?: AbortSignal): Promise<AuthSessionResponse> {
+  return unwrap(client.GET("/api/auth/session", { signal }), "加载登录状态失败。");
+}
+
+export async function login(body: AuthLoginRequest): Promise<AuthSessionResponse> {
+  return unwrap(client.POST("/api/auth/login", { body }), "登录失败。");
+}
+
+export async function logout(): Promise<AuthSessionResponse> {
+  return unwrap(client.POST("/api/auth/logout"), "退出登录失败。");
+}
+
 export async function listConversations(signal?: AbortSignal): Promise<ConversationListResponse> {
   return unwrap(client.GET("/api/conversations", { signal }), "加载对话列表失败。");
 }
@@ -80,8 +108,21 @@ export async function getConversation(
   );
 }
 
-export async function createConversation(): Promise<ConversationRecord> {
-  return unwrap(client.POST("/api/conversations"), "创建对话失败。");
+export async function createConversation(body: ConversationCreateRequest): Promise<ConversationRecord> {
+  return unwrap(client.POST("/api/conversations", { body }), "创建对话失败。");
+}
+
+export async function updateConversation(
+  conversationId: number,
+  body: ConversationUpdateRequest,
+): Promise<ConversationRecord> {
+  return unwrap(
+    client.PATCH("/api/conversations/{conversation_id}", {
+      params: { path: { conversation_id: conversationId } },
+      body,
+    }),
+    "更新对话失败。",
+  );
 }
 
 export async function deleteConversation(conversationId: number): Promise<void> {
@@ -144,6 +185,13 @@ export async function createGraphConfig(body: GraphConfigCreateRequest): Promise
   return unwrap(client.POST("/api/graph-configs", { body }), "创建工作流配置失败。");
 }
 
+export async function previewGraphConfig(
+  body: GraphPromptPreviewRequest,
+  signal?: AbortSignal,
+): Promise<GraphPromptPreviewResponse> {
+  return unwrap(client.POST("/api/graph-configs/preview", { body, signal }), "加载工作流预览失败。");
+}
+
 export async function updateGraphConfig(
   configId: number,
   body: GraphConfigUpdateRequest,
@@ -173,4 +221,24 @@ export async function deleteGraphConfig(configId: number): Promise<void> {
   if (error) {
     throw new Error(extractErrorMessage(error) ?? "删除工作流配置失败。");
   }
+}
+
+export async function listAILogs(
+  filters: {
+    conversation_id?: number;
+    request_id?: string;
+    status?: AILogStatus;
+    node_name?: string;
+    graph_config_id?: number;
+    limit?: number;
+  } = {},
+  signal?: AbortSignal,
+): Promise<AILogListResponse> {
+  return unwrap(
+    client.GET("/api/ai-logs", {
+      params: { query: filters },
+      signal,
+    }),
+    "加载 AI 日志失败。",
+  );
 }

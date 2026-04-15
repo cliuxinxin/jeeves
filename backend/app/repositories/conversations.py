@@ -1,10 +1,16 @@
 import sqlite3
+from json import dumps, loads
 
 from ..database import get_connection
 from ..schemas import ConversationMessageRecord, ConversationRecord, ConversationSummary
+from .graph_configs import get_active_graph_config
 
 
 class ConversationNotFoundError(Exception):
+    pass
+
+
+class ConversationGraphConfigNotFoundError(Exception):
     pass
 
 
@@ -19,20 +25,59 @@ def _row_to_conversation_record(row: sqlite3.Row) -> ConversationRecord:
 
 
 def _row_to_message_record(row: sqlite3.Row) -> ConversationMessageRecord:
-    return ConversationMessageRecord.model_validate(dict(row))
+    payload = dict(row)
+    payload["state_patch"] = loads(payload.get("state_patch") or "{}")
+    return ConversationMessageRecord.model_validate(payload)
 
 
-def create_conversation(title: str = "New chat") -> ConversationRecord:
+def _validate_graph_config_id(
+    connection: sqlite3.Connection, graph_config_id: int | None
+) -> int | None:
+    if graph_config_id is None:
+        return None
+
+    row = connection.execute(
+        "SELECT id FROM graph_configs WHERE id = ?",
+        (graph_config_id,),
+    ).fetchone()
+    if row is None:
+        raise ConversationGraphConfigNotFoundError(f"Graph config {graph_config_id} was not found.")
+    return int(row["id"])
+
+
+def create_conversation(
+    title: str = "New chat",
+    *,
+    graph_config_id: int | None = None,
+) -> ConversationRecord:
     with get_connection() as connection:
+        resolved_graph_config_id = graph_config_id
+        if resolved_graph_config_id is None:
+            active_graph_config = get_active_graph_config()
+            resolved_graph_config_id = active_graph_config.id if active_graph_config else None
+
+        resolved_graph_config_id = _validate_graph_config_id(connection, resolved_graph_config_id)
         cursor = connection.execute(
             """
-            INSERT INTO conversations (title, updated_at)
-            VALUES (?, CURRENT_TIMESTAMP)
+            INSERT INTO conversations (title, graph_config_id, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
             """,
-            (title,),
+            (title, resolved_graph_config_id),
         )
         row = connection.execute(
-            "SELECT * FROM conversations WHERE id = ?", (int(cursor.lastrowid),)
+            """
+            SELECT
+                conversations.id,
+                conversations.title,
+                conversations.graph_config_id,
+                graph_configs.name AS graph_config_name,
+                conversations.created_at,
+                conversations.updated_at
+            FROM conversations
+            LEFT JOIN graph_configs ON graph_configs.id = conversations.graph_config_id
+            WHERE conversations.id = ?
+            """,
+            (int(cursor.lastrowid),),
         ).fetchone()
 
     if row is None:
@@ -47,6 +92,8 @@ def list_conversations() -> list[ConversationSummary]:
             SELECT
                 conversations.id,
                 conversations.title,
+                conversations.graph_config_id,
+                graph_configs.name AS graph_config_name,
                 conversations.created_at,
                 conversations.updated_at,
                 COUNT(conversation_messages.id) AS message_count,
@@ -61,6 +108,7 @@ def list_conversations() -> list[ConversationSummary]:
                     ''
                 ) AS preview
             FROM conversations
+            LEFT JOIN graph_configs ON graph_configs.id = conversations.graph_config_id
             LEFT JOIN conversation_messages ON conversation_messages.conversation_id = conversations.id
             GROUP BY conversations.id
             ORDER BY conversations.updated_at DESC, conversations.id DESC
@@ -73,7 +121,19 @@ def list_conversations() -> list[ConversationSummary]:
 def get_conversation(conversation_id: int) -> ConversationRecord:
     with get_connection() as connection:
         row = connection.execute(
-            "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
+            """
+            SELECT
+                conversations.id,
+                conversations.title,
+                conversations.graph_config_id,
+                graph_configs.name AS graph_config_name,
+                conversations.created_at,
+                conversations.updated_at
+            FROM conversations
+            LEFT JOIN graph_configs ON graph_configs.id = conversations.graph_config_id
+            WHERE conversations.id = ?
+            """,
+            (conversation_id,),
         ).fetchone()
 
     if row is None:
@@ -91,7 +151,15 @@ def get_conversation_messages(conversation_id: int) -> list[ConversationMessageR
 
         rows = connection.execute(
             """
-            SELECT id, conversation_id, role, content, created_at
+            SELECT
+                id,
+                conversation_id,
+                role,
+                content,
+                node_name AS node,
+                node_label,
+                state_patch,
+                created_at
             FROM conversation_messages
             WHERE conversation_id = ?
             ORDER BY id ASC
@@ -102,7 +170,15 @@ def get_conversation_messages(conversation_id: int) -> list[ConversationMessageR
     return [_row_to_message_record(row) for row in rows]
 
 
-def append_message(conversation_id: int, role: str, content: str) -> ConversationMessageRecord:
+def append_message(
+    conversation_id: int,
+    role: str,
+    content: str,
+    *,
+    node: str | None = None,
+    node_label: str | None = None,
+    state_patch: dict[str, str] | None = None,
+) -> ConversationMessageRecord:
     with get_connection() as connection:
         exists = connection.execute(
             "SELECT title FROM conversations WHERE id = ?", (conversation_id,)
@@ -112,10 +188,24 @@ def append_message(conversation_id: int, role: str, content: str) -> Conversatio
 
         cursor = connection.execute(
             """
-            INSERT INTO conversation_messages (conversation_id, role, content)
-            VALUES (?, ?, ?)
+            INSERT INTO conversation_messages (
+                conversation_id,
+                role,
+                content,
+                node_name,
+                node_label,
+                state_patch
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (conversation_id, role, content),
+            (
+                conversation_id,
+                role,
+                content,
+                node,
+                node_label,
+                dumps(state_patch or {}, ensure_ascii=False),
+            ),
         )
         connection.execute(
             """
@@ -147,7 +237,15 @@ def append_message(conversation_id: int, role: str, content: str) -> Conversatio
 
         row = connection.execute(
             """
-            SELECT id, conversation_id, role, content, created_at
+            SELECT
+                id,
+                conversation_id,
+                role,
+                content,
+                node_name AS node,
+                node_label,
+                state_patch,
+                created_at
             FROM conversation_messages
             WHERE id = ?
             """,
@@ -169,6 +267,64 @@ def update_conversation_title(conversation_id: int, title: str) -> None:
             """,
             (title, conversation_id),
         )
+
+
+def update_conversation(
+    conversation_id: int,
+    *,
+    title: str | None = None,
+    title_provided: bool = False,
+    graph_config_id: int | None = None,
+    graph_config_id_provided: bool = False,
+) -> ConversationRecord:
+    with get_connection() as connection:
+        existing = connection.execute(
+            "SELECT 1 FROM conversations WHERE id = ?",
+            (conversation_id,),
+        ).fetchone()
+        if existing is None:
+            raise ConversationNotFoundError(f"Conversation {conversation_id} was not found.")
+
+        if title_provided:
+            connection.execute(
+                """
+                UPDATE conversations
+                SET title = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (title or "New chat", conversation_id),
+            )
+
+        if graph_config_id_provided:
+            resolved_graph_config_id = _validate_graph_config_id(connection, graph_config_id)
+            connection.execute(
+                """
+                UPDATE conversations
+                SET graph_config_id = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (resolved_graph_config_id, conversation_id),
+            )
+
+        row = connection.execute(
+            """
+            SELECT
+                conversations.id,
+                conversations.title,
+                conversations.graph_config_id,
+                graph_configs.name AS graph_config_name,
+                conversations.created_at,
+                conversations.updated_at
+            FROM conversations
+            LEFT JOIN graph_configs ON graph_configs.id = conversations.graph_config_id
+            WHERE conversations.id = ?
+            """,
+            (conversation_id,),
+        ).fetchone()
+
+    if row is None:
+        raise ConversationNotFoundError(f"Conversation {conversation_id} was not found.")
+    return _row_to_conversation_record(row)
 
 
 def delete_conversation(conversation_id: int) -> None:

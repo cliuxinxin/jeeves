@@ -104,6 +104,25 @@ SQLite 当前维护 4 张核心表：
 - `frontend/scripts/generate-api.mjs` 调用 `openapi-typescript` 生成 `frontend/lib/api/generated.ts`。
 - `frontend/lib/api/client.ts` 作为统一 API client，供 hooks 使用。
 
+## 内置工作流
+
+当前内置 3 种图类型：
+
+- `simple_chat`: 单节点对话，适合普通问答。
+- `summary_analysis`: 两阶段分析流，先分类/分析，再输出结构化拆解。
+- `viral_tweet`: 两阶段爆款推文流，先提炼传播主轴，再生成主推文、备选版本与配套建议。
+
+工作流支持多配置并存：
+
+- 设置页中的“默认工作流”只影响新建对话。
+- 每个对话都可以单独绑定自己的工作流，互不影响。
+
+`viral_tweet` 适合这样的输入：
+
+- 只有一个模糊 idea，没有任何资料。
+- 有零散资料、案例、事实、草稿，希望系统帮你提炼传播角度。
+- 已经知道主题，但想把表达改写成更容易转发、收藏、评论的推文。
+
 ## 流式聊天链路
 
 1. 前端发送 `POST /api/chat/stream`。

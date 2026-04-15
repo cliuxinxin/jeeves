@@ -23,6 +23,13 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
     database_path: str = "data/jeeves.db"
+    auth_username: str = "admin"
+    auth_password: str = "admin123"
+    auth_session_secret: str = "jeeves-session-secret-change-me"
+    auth_session_cookie_name: str = "jeeves_session"
+    auth_session_max_age: int = 60 * 60 * 24 * 30
+    auth_cookie_secure: bool = False
+    auth_cookie_samesite: str = "lax"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -47,6 +54,14 @@ class Settings(BaseSettings):
             return [str(origin).strip() for origin in value if str(origin).strip()]
 
         return value
+
+    @field_validator("auth_cookie_samesite")
+    @classmethod
+    def validate_auth_cookie_samesite(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"lax", "strict", "none"}:
+            raise ValueError("AUTH_COOKIE_SAMESITE must be one of: lax, strict, none.")
+        return normalized
 
 
 @lru_cache(maxsize=1)

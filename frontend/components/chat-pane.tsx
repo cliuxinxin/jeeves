@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { LoaderCircle, Plus, Send, Settings2 } from "lucide-react";
+import { LoaderCircle, LogOut, PanelRightClose, PanelRightOpen, Plus, Send, Settings2 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -11,6 +11,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { GraphConfigRecord, HealthResponse } from "@/lib/api/client";
+import { formatNodeLabel, stageAccentClass } from "@/lib/node-ui";
 import type { StreamedAssistantMessage } from "@/hooks/use-chat-stream";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,8 @@ export type ChatPaneMessage = {
   content: string;
   created_at?: string;
   node?: string;
+  node_label?: string | null;
+  state_patch?: Record<string, string>;
 };
 
 type ChatPaneProps = {
@@ -38,20 +41,16 @@ type ChatPaneProps = {
   onSend: () => void;
   onNewConversation: () => void;
   onOpenSettings: () => void;
+  onToggleTrace: () => void;
   onActivateGraphConfig: (configId: number) => void;
+  isTraceOpen: boolean;
+  authUsername?: string | null;
+  onLogout?: () => void;
+  isAuthMutating?: boolean;
 };
 
-function formatStageLabel(node?: string) {
-  if (!node) return null;
-  if (node === "analyzer") return "阶段 1 · 初步分析";
-  if (node === "deconstructor") return "阶段 2 · 拆解分析";
-  return `阶段 · ${node}`;
-}
-
-function stageAccentClass(node?: string) {
-  if (node === "analyzer") return "border-l-sky-400 bg-sky-50/60";
-  if (node === "deconstructor") return "border-l-emerald-400 bg-emerald-50/50";
-  return "border-l-slate-300 bg-white";
+function entriesFromStatePatch(statePatch?: Record<string, string>) {
+  return Object.entries(statePatch ?? {}).filter(([, value]) => value);
 }
 
 function normalizeMarkdown(content: string) {
@@ -149,7 +148,12 @@ export function ChatPane({
   onSend,
   onNewConversation,
   onOpenSettings,
+  onToggleTrace,
   onActivateGraphConfig,
+  isTraceOpen,
+  authUsername,
+  onLogout,
+  isAuthMutating,
 }: ChatPaneProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
 
@@ -178,7 +182,7 @@ export function ChatPane({
               <span className="text-sm text-slate-500">{modelLabel}</span>
               <span className="text-slate-300">|</span>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-500">工作流:</span>
+                <span className="text-sm text-slate-500">当前会话工作流:</span>
                 <select
                   className="max-w-[150px] cursor-pointer truncate border-b border-dashed border-slate-300 bg-transparent pb-0.5 text-sm font-medium text-slate-700 focus:outline-none"
                   value={activeGraphId ?? ""}
@@ -203,9 +207,19 @@ export function ChatPane({
           </div>
 
           <div className="flex items-center gap-2">
+            {authUsername ? (
+              <Button type="button" variant="secondary" className="h-10 px-3" onClick={onLogout} disabled={isAuthMutating}>
+                {isAuthMutating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                退出 ({authUsername})
+              </Button>
+            ) : null}
             <Button type="button" variant="secondary" className="h-10 px-3" onClick={onNewConversation}>
               <Plus className="h-4 w-4" />
               新对话
+            </Button>
+            <Button type="button" variant="secondary" className="h-10 px-3" onClick={onToggleTrace}>
+              {isTraceOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+              轨迹
             </Button>
             <Button type="button" variant="secondary" size="icon" onClick={onOpenSettings}>
               <Settings2 className="h-4 w-4" />
@@ -255,7 +269,22 @@ export function ChatPane({
                         {message.node ? (
                           <div className="not-prose mb-2 flex items-center justify-between gap-3">
                             <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur">
-                              {formatStageLabel(message.node)}
+                              {formatNodeLabel(message.node, message.node_label)}
+                            </div>
+                          </div>
+                        ) : null}
+                        {entriesFromStatePatch(message.state_patch).length > 0 ? (
+                          <div className="not-prose mb-3 rounded-2xl border border-slate-200 bg-white/85 p-3">
+                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              State Writes
+                            </div>
+                            <div className="space-y-2">
+                              {entriesFromStatePatch(message.state_patch).map(([key, value]) => (
+                                <div key={key} className="grid gap-1 text-xs text-slate-700 sm:grid-cols-[7rem_minmax(0,1fr)]">
+                                  <div className="font-semibold text-slate-500">{key}</div>
+                                  <div className="whitespace-pre-wrap break-words">{value}</div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ) : null}
@@ -310,7 +339,7 @@ export function ChatPane({
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 onSend();
               }

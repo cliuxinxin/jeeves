@@ -21,6 +21,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Auth Session */
+        get: operations["get_auth_session_api_auth_session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Login */
+        post: operations["login_api_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["logout_api_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -30,6 +81,23 @@ export interface paths {
         };
         /** Health */
         get: operations["health_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ai Logs */
+        get: operations["get_ai_logs_api_ai_logs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -126,6 +194,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/graph-configs/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Graph Config Endpoint */
+        post: operations["preview_graph_config_endpoint_api_graph_configs_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/graph-configs/{config_id}": {
         parameters: {
             query?: never;
@@ -194,7 +279,8 @@ export interface paths {
         delete: operations["delete_conversation_endpoint_api_conversations__conversation_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Conversation Endpoint */
+        patch: operations["update_conversation_endpoint_api_conversations__conversation_id__patch"];
         trace?: never;
     };
     "/api/chat/stream": {
@@ -235,6 +321,77 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AILogListResponse */
+        AILogListResponse: {
+            /** Items */
+            items: components["schemas"]["AILogRecord"][];
+        };
+        /** AILogMessage */
+        AILogMessage: {
+            /** Role */
+            role: string;
+            /** Content */
+            content: string;
+        };
+        /** AILogRecord */
+        AILogRecord: {
+            /** Id */
+            id: number;
+            /** Request Id */
+            request_id: string;
+            /** Conversation Id */
+            conversation_id?: number | null;
+            /** Conversation Title */
+            conversation_title?: string | null;
+            /** Graph Config Id */
+            graph_config_id?: number | null;
+            /** Graph Config Name */
+            graph_config_name?: string | null;
+            /** Node Name */
+            node_name?: string | null;
+            /** Node Label */
+            node_label?: string | null;
+            /** Operation */
+            operation?: string | null;
+            /** Llm Source */
+            llm_source?: string | null;
+            /** Llm Config Name */
+            llm_config_name?: string | null;
+            /** Model */
+            model?: string | null;
+            status: components["schemas"]["AILogStatus"];
+            /** Attempt Count */
+            attempt_count: number;
+            /** Duration Ms */
+            duration_ms: number;
+            /** Input Messages */
+            input_messages?: components["schemas"]["AILogMessage"][];
+            /** Response Text */
+            response_text?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /**
+         * AILogStatus
+         * @enum {string}
+         */
+        AILogStatus: "success" | "error";
+        /** AuthLoginRequest */
+        AuthLoginRequest: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
+        /** AuthSessionResponse */
+        AuthSessionResponse: {
+            /** Authenticated */
+            authenticated: boolean;
+            /** Username */
+            username?: string | null;
+        };
         /** ChatMessage */
         ChatMessage: {
             /**
@@ -265,6 +422,16 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** ConversationCreateRequest */
+        ConversationCreateRequest: {
+            /**
+             * Title
+             * @default New chat
+             */
+            title: string;
+            /** Graph Config Id */
+            graph_config_id?: number | null;
+        };
         /** ConversationDetailResponse */
         ConversationDetailResponse: {
             conversation: components["schemas"]["ConversationRecord"];
@@ -289,6 +456,14 @@ export interface components {
             role: "user" | "assistant" | "system";
             /** Content */
             content: string;
+            /** Node */
+            node?: string | null;
+            /** Node Label */
+            node_label?: string | null;
+            /** State Patch */
+            state_patch?: {
+                [key: string]: string;
+            };
             /** Created At */
             created_at: string;
         };
@@ -298,6 +473,10 @@ export interface components {
             id: number;
             /** Title */
             title: string;
+            /** Graph Config Id */
+            graph_config_id?: number | null;
+            /** Graph Config Name */
+            graph_config_name?: string | null;
             /** Created At */
             created_at: string;
             /** Updated At */
@@ -309,6 +488,10 @@ export interface components {
             id: number;
             /** Title */
             title: string;
+            /** Graph Config Id */
+            graph_config_id?: number | null;
+            /** Graph Config Name */
+            graph_config_name?: string | null;
             /** Created At */
             created_at: string;
             /** Updated At */
@@ -323,6 +506,13 @@ export interface components {
              * @default 0
              */
             message_count: number;
+        };
+        /** ConversationUpdateRequest */
+        ConversationUpdateRequest: {
+            /** Title */
+            title?: string | null;
+            /** Graph Config Id */
+            graph_config_id?: number | null;
         };
         /** GraphConfigCreateRequest */
         GraphConfigCreateRequest: {
@@ -344,6 +534,10 @@ export interface components {
              * @default
              */
             deconstructor_prompt: string;
+            /** Prompt Values */
+            prompt_values?: {
+                [key: string]: string;
+            };
         };
         /** GraphConfigListResponse */
         GraphConfigListResponse: {
@@ -371,6 +565,10 @@ export interface components {
              * @default
              */
             deconstructor_prompt: string;
+            /** Prompt Values */
+            prompt_values?: {
+                [key: string]: string;
+            };
             /** Is Active */
             is_active: boolean;
             /** Created At */
@@ -398,12 +596,91 @@ export interface components {
              * @default
              */
             deconstructor_prompt: string;
+            /** Prompt Values */
+            prompt_values?: {
+                [key: string]: string;
+            };
+        };
+        /** GraphNodePromptPreview */
+        GraphNodePromptPreview: {
+            /** Node */
+            node: string;
+            /** Node Label */
+            node_label: string;
+            /** Purpose */
+            purpose: string;
+            /** Reads */
+            reads?: string[];
+            /** Writes */
+            writes?: string[];
+            /** Prompt Source */
+            prompt_source: string;
+            /** Prompt Preview */
+            prompt_preview: string;
+        };
+        /** GraphPromptFieldPreview */
+        GraphPromptFieldPreview: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            /** Placeholder */
+            placeholder: string;
+        };
+        /** GraphPromptPreviewRequest */
+        GraphPromptPreviewRequest: {
+            graph_type: components["schemas"]["GraphType"];
+            /**
+             * System Prompt
+             * @default
+             */
+            system_prompt: string;
+            /**
+             * Analyzer Prompt
+             * @default
+             */
+            analyzer_prompt: string;
+            /**
+             * Deconstructor Prompt
+             * @default
+             */
+            deconstructor_prompt: string;
+            /** Prompt Values */
+            prompt_values?: {
+                [key: string]: string;
+            };
+        };
+        /** GraphPromptPreviewResponse */
+        GraphPromptPreviewResponse: {
+            /** Items */
+            items: components["schemas"]["GraphNodePromptPreview"][];
+            /** State Slots */
+            state_slots?: components["schemas"]["GraphStateSlotPreview"][];
+            /** Prompt Fields */
+            prompt_fields?: components["schemas"]["GraphPromptFieldPreview"][];
+        };
+        /** GraphStateSlotPreview */
+        GraphStateSlotPreview: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            /** Kind */
+            kind: string;
+            /** Written By */
+            written_by?: string[];
+            /** Read By */
+            read_by?: string[];
         };
         /**
          * GraphType
          * @enum {string}
          */
-        GraphType: "simple_chat" | "summary_analysis";
+        GraphType: "simple_chat" | "summary_analysis" | "viral_tweet" | "article_value";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -568,6 +845,79 @@ export interface operations {
             };
         };
     };
+    get_auth_session_api_auth_session_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionResponse"];
+                };
+            };
+        };
+    };
+    login_api_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionResponse"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;
@@ -584,6 +934,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    get_ai_logs_api_ai_logs_get: {
+        parameters: {
+            query?: {
+                conversation_id?: number | null;
+                request_id?: string | null;
+                status?: components["schemas"]["AILogStatus"] | null;
+                node_name?: string | null;
+                graph_config_id?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AILogListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -826,6 +1212,39 @@ export interface operations {
             };
         };
     };
+    preview_graph_config_endpoint_api_graph_configs_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphPromptPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphPromptPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_graph_config_endpoint_api_graph_configs__config_id__put: {
         parameters: {
             query?: never;
@@ -948,7 +1367,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ConversationCreateRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             201: {
@@ -957,6 +1380,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1012,6 +1444,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_conversation_endpoint_api_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationRecord"];
                 };
             };
             /** @description Validation Error */

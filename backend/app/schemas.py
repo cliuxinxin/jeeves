@@ -7,6 +7,13 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class GraphType(str, Enum):
     SIMPLE_CHAT = "simple_chat"
     SUMMARY_ANALYSIS = "summary_analysis"
+    VIRAL_TWEET = "viral_tweet"
+    ARTICLE_VALUE = "article_value"
+
+
+class AILogStatus(str, Enum):
+    SUCCESS = "success"
+    ERROR = "error"
 
 
 class ChatMessage(BaseModel):
@@ -143,9 +150,26 @@ class HealthResponse(BaseModel):
     max_retries: int | None = None
 
 
+class AuthLoginRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+    @field_validator("username", "password", mode="before")
+    @classmethod
+    def strip_required_strings(cls, value: str) -> str:
+        return _strip_required(value)
+
+
+class AuthSessionResponse(BaseModel):
+    authenticated: bool
+    username: str | None = None
+
+
 class ConversationRecord(BaseModel):
     id: int
     title: str
+    graph_config_id: int | None = None
+    graph_config_name: str | None = None
     created_at: str
     updated_at: str
 
@@ -160,6 +184,9 @@ class ConversationMessageRecord(BaseModel):
     conversation_id: int
     role: Literal["user", "assistant", "system"]
     content: str
+    node: str | None = None
+    node_label: str | None = None
+    state_patch: dict[str, str] = Field(default_factory=dict)
     created_at: str
 
 
@@ -172,12 +199,33 @@ class ConversationDetailResponse(BaseModel):
     messages: list[ConversationMessageRecord]
 
 
+class ConversationCreateRequest(BaseModel):
+    title: str = Field(default="New chat", min_length=1, max_length=200)
+    graph_config_id: int | None = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def strip_title(cls, value: str) -> str:
+        return _strip_required(value)
+
+
+class ConversationUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    graph_config_id: int | None = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def strip_optional_title(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+
 class GraphConfigCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     graph_type: GraphType
     system_prompt: str = Field(default="")
     analyzer_prompt: str = Field(default="")
     deconstructor_prompt: str = Field(default="")
+    prompt_values: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -191,6 +239,7 @@ class GraphConfigUpdateRequest(BaseModel):
     system_prompt: str = Field(default="")
     analyzer_prompt: str = Field(default="")
     deconstructor_prompt: str = Field(default="")
+    prompt_values: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -205,6 +254,7 @@ class GraphConfigRecord(BaseModel):
     system_prompt: str
     analyzer_prompt: str = ""
     deconstructor_prompt: str = ""
+    prompt_values: dict[str, str] = Field(default_factory=dict)
     is_active: bool
     created_at: str
     updated_at: str
@@ -213,3 +263,74 @@ class GraphConfigRecord(BaseModel):
 class GraphConfigListResponse(BaseModel):
     items: list[GraphConfigRecord]
     active_config_id: int | None = None
+
+
+class GraphPromptPreviewRequest(BaseModel):
+    graph_type: GraphType
+    system_prompt: str = Field(default="")
+    analyzer_prompt: str = Field(default="")
+    deconstructor_prompt: str = Field(default="")
+    prompt_values: dict[str, str] = Field(default_factory=dict)
+
+
+class GraphNodePromptPreview(BaseModel):
+    node: str
+    node_label: str
+    purpose: str
+    reads: list[str] = Field(default_factory=list)
+    writes: list[str] = Field(default_factory=list)
+    prompt_source: str
+    prompt_preview: str
+
+
+class GraphStateSlotPreview(BaseModel):
+    name: str
+    label: str
+    description: str
+    kind: str
+    written_by: list[str] = Field(default_factory=list)
+    read_by: list[str] = Field(default_factory=list)
+
+
+class GraphPromptFieldPreview(BaseModel):
+    key: str
+    label: str
+    description: str
+    placeholder: str
+
+
+class GraphPromptPreviewResponse(BaseModel):
+    items: list[GraphNodePromptPreview]
+    state_slots: list[GraphStateSlotPreview] = Field(default_factory=list)
+    prompt_fields: list[GraphPromptFieldPreview] = Field(default_factory=list)
+
+
+class AILogMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AILogRecord(BaseModel):
+    id: int
+    request_id: str
+    conversation_id: int | None = None
+    conversation_title: str | None = None
+    graph_config_id: int | None = None
+    graph_config_name: str | None = None
+    node_name: str | None = None
+    node_label: str | None = None
+    operation: str | None = None
+    llm_source: str | None = None
+    llm_config_name: str | None = None
+    model: str | None = None
+    status: AILogStatus
+    attempt_count: int
+    duration_ms: float
+    input_messages: list[AILogMessage] = Field(default_factory=list)
+    response_text: str | None = None
+    error_message: str | None = None
+    created_at: str
+
+
+class AILogListResponse(BaseModel):
+    items: list[AILogRecord]

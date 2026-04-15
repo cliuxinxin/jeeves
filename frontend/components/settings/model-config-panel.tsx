@@ -82,6 +82,8 @@ export function ModelConfigPanel({
   onTestConfig,
 }: ModelConfigPanelProps) {
   const [selectedConfigId, setSelectedConfigId] = useState<number | null>(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -92,13 +94,26 @@ export function ModelConfigPanel({
 
   useEffect(() => {
     if (configs.length === 0) {
-      setSelectedConfigId(null);
-      setForm(emptyForm);
+      if (!isDirty) {
+        setSelectedConfigId(null);
+        setIsCreatingNew(true);
+        setForm(emptyForm);
+      }
+      return;
+    }
+
+    if (isCreatingNew) {
+      return;
+    }
+
+    const selectedConfigExists =
+      selectedConfigId !== null && configs.some((config) => config.id === selectedConfigId);
+    if (isDirty && selectedConfigExists) {
       return;
     }
 
     const nextId =
-      selectedConfigId && configs.some((config) => config.id === selectedConfigId)
+      selectedConfigExists
         ? selectedConfigId
         : activeConfigId ?? configs[0]?.id ?? null;
 
@@ -106,23 +121,39 @@ export function ModelConfigPanel({
     const targetConfig = configs.find((config) => config.id === nextId);
     if (targetConfig) {
       setForm(toFormState(targetConfig));
+      setIsDirty(false);
     }
-  }, [activeConfigId, configs, selectedConfigId]);
+  }, [activeConfigId, configs, isCreatingNew, isDirty, selectedConfigId]);
 
   function updateForm<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+    setIsDirty(true);
+  }
+
+  function confirmDiscardUnsavedChanges() {
+    return !isDirty || confirm("当前表单有未保存修改，确认放弃这些修改？");
+  }
+
+  function resetToNewConfig() {
+    setSelectedConfigId(null);
+    setIsCreatingNew(true);
+    setIsDirty(false);
+    setForm(emptyForm);
+    setNotice(null);
   }
 
   function selectConfig(config: LLMConfigRecord) {
+    if (!confirmDiscardUnsavedChanges()) return;
+    setIsCreatingNew(false);
     setSelectedConfigId(config.id);
+    setIsDirty(false);
     setForm(toFormState(config));
     setNotice(null);
   }
 
   function createNewConfig() {
-    setSelectedConfigId(null);
-    setForm(emptyForm);
-    setNotice(null);
+    if (!confirmDiscardUnsavedChanges()) return;
+    resetToNewConfig();
   }
 
   function buildConfigPayload(): LLMConfigCreateRequest | LLMConfigUpdateRequest {
@@ -161,6 +192,8 @@ export function ModelConfigPanel({
         ? await onUpdateConfig({ configId: form.id, payload: payload as LLMConfigUpdateRequest })
         : await onCreateConfig(payload as LLMConfigCreateRequest);
       setSelectedConfigId(saved.id);
+      setIsCreatingNew(false);
+      setIsDirty(false);
       setForm(toFormState(saved));
       setNotice({ type: "success", text: form.id ? "配置已更新。" : "配置已创建。" });
     } catch (error) {
@@ -191,9 +224,12 @@ export function ModelConfigPanel({
   }
 
   async function handleActivate(configId: number) {
+    if (!confirmDiscardUnsavedChanges()) return;
     try {
       const activated = await onActivateConfig(configId);
       setSelectedConfigId(activated.id);
+      setIsCreatingNew(false);
+      setIsDirty(false);
       setForm(toFormState(activated));
       setNotice({ type: "success", text: `已启用 ${activated.name}。` });
     } catch (error) {
@@ -205,7 +241,9 @@ export function ModelConfigPanel({
     if (!confirm("确认删除此配置？")) return;
     try {
       await onDeleteConfig(configId);
-      createNewConfig();
+      if (selectedConfigId === configId) {
+        resetToNewConfig();
+      }
       setNotice({ type: "success", text: "配置已删除。" });
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "删除失败。" });
@@ -350,9 +388,11 @@ export function ModelConfigPanel({
         <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5">
           <div className="flex items-center justify-between">
             <div className="text-sm font-semibold text-slate-900">
-              {form.id ? "编辑模型配置" : "新建模型配置"}
+              {isCreatingNew || !form.id ? "新建模型配置" : "编辑模型配置"}
             </div>
-            {form.id ? <div className="text-xs text-slate-500">ID #{form.id}</div> : null}
+            <div className="text-xs text-slate-500">
+              {isDirty ? "有未保存修改" : form.id && !isCreatingNew ? `ID #${form.id}` : null}
+            </div>
           </div>
 
           <div className="space-y-2">

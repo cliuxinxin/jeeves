@@ -1,9 +1,5 @@
-import AssistantWorkspace from "@/components/assistant-workspace";
+import { AuthShell } from "@/components/auth-shell";
 
 export default function Home() {
-  return (
-    <main className="h-screen overflow-hidden">
-      <AssistantWorkspace />
-    </main>
-  );
+  return <AuthShell />;
 }

@@ -2,49 +2,41 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from ..graph_prompt_values import (
+    PromptValues,
+    resolve_prompt_values,
+)
 from ..schemas import GraphConfigRecord, GraphType
-from .simple_chat import build_simple_chat_graph
-from .summary_analysis import build_summary_analysis_graph
-
-DEFAULT_ASSISTANT_SYSTEM_PROMPT = (
-    "You are Jeeves, a polished AI assistant built with LangGraph. "
-    "Be helpful, concise, and practical."
-)
-
-DEFAULT_ANALYZER_PROMPT = (
-    "你是一个专业的文本分类器。请阅读用户输入，判定文章类型，并在结尾严格输出：【文章类型：XXX】。"
-)
+from .pipeline import build_pipeline_graph
 
 
 def resolve_graph_settings(
     active_config: GraphConfigRecord | None,
-) -> tuple[GraphType, str, str, str]:
+) -> tuple[GraphType, PromptValues]:
     if active_config is None:
+        graph_type = GraphType.SIMPLE_CHAT
         return (
-            GraphType.SIMPLE_CHAT,
-            DEFAULT_ASSISTANT_SYSTEM_PROMPT,
-            "",
-            "",
+            graph_type,
+            resolve_prompt_values(graph_type=graph_type),
         )
 
     graph_type = active_config.graph_type
-    system_prompt = active_config.system_prompt or DEFAULT_ASSISTANT_SYSTEM_PROMPT
-    analyzer_prompt = active_config.analyzer_prompt or DEFAULT_ANALYZER_PROMPT
-    deconstructor_prompt = active_config.deconstructor_prompt or system_prompt
-    return graph_type, system_prompt, analyzer_prompt, deconstructor_prompt
+    prompt_values = resolve_prompt_values(
+        graph_type=graph_type,
+        prompt_values=active_config.prompt_values,
+        system_prompt=active_config.system_prompt,
+        analyzer_prompt=active_config.analyzer_prompt,
+        deconstructor_prompt=active_config.deconstructor_prompt,
+    )
+    return graph_type, prompt_values
 
 
 @lru_cache(maxsize=16)
 def compile_graph(
     graph_type: GraphType,
-    system_prompt: str,
-    analyzer_prompt: str,
-    deconstructor_prompt: str,
+    prompt_values_key: tuple[tuple[str, str], ...],
 ):
-    if graph_type == GraphType.SUMMARY_ANALYSIS:
-        return build_summary_analysis_graph(
-            analyzer_prompt=analyzer_prompt,
-            deconstructor_prompt=deconstructor_prompt,
-        )
-
-    return build_simple_chat_graph(system_prompt=system_prompt)
+    return build_pipeline_graph(
+        graph_type=graph_type,
+        prompt_values=dict(prompt_values_key),
+    )

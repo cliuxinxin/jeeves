@@ -13,7 +13,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 
 @pytest.fixture()
-def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
+def anonymous_client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     from app.config import get_settings
     from app.graph import invalidate_graph_cache
     from app.llm import invalidate_llm_caches
@@ -34,3 +34,13 @@ def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     get_settings.cache_clear()
     invalidate_graph_cache()
     invalidate_llm_caches()
+
+
+@pytest.fixture()
+def client(anonymous_client: TestClient) -> Iterator[TestClient]:
+    response = anonymous_client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "admin123"},
+    )
+    assert response.status_code == 200
+    yield anonymous_client

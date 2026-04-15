@@ -3,6 +3,12 @@ import sqlite3
 from fastapi import APIRouter, HTTPException, Request
 
 from ..graph import invalidate_graph_cache
+from ..graph_contracts import (
+    get_graph_prompt_field_definitions,
+    get_graph_state_slot_contracts,
+)
+from ..graph_prompt_values import resolve_prompt_values
+from ..prompt_compiler import build_graph_prompt_previews
 from ..repositories.graph_configs import (
     GraphConfigNotFoundError,
     activate_graph_config,
@@ -16,6 +22,11 @@ from ..schemas import (
     GraphConfigListResponse,
     GraphConfigRecord,
     GraphConfigUpdateRequest,
+    GraphNodePromptPreview,
+    GraphPromptFieldPreview,
+    GraphPromptPreviewRequest,
+    GraphPromptPreviewResponse,
+    GraphStateSlotPreview,
 )
 from ..telemetry import get_request_id, log_event
 
@@ -28,6 +39,46 @@ async def get_graph_configs() -> GraphConfigListResponse:
     active_config = next((item for item in items if item.is_active), None)
     return GraphConfigListResponse(
         items=items, active_config_id=active_config.id if active_config else None
+    )
+
+
+@router.post("/api/graph-configs/preview", response_model=GraphPromptPreviewResponse)
+async def preview_graph_config_endpoint(
+    payload: GraphPromptPreviewRequest,
+) -> GraphPromptPreviewResponse:
+    prompt_values = resolve_prompt_values(
+        graph_type=payload.graph_type,
+        prompt_values=payload.prompt_values,
+        system_prompt=payload.system_prompt,
+        analyzer_prompt=payload.analyzer_prompt,
+        deconstructor_prompt=payload.deconstructor_prompt,
+    )
+    previews = build_graph_prompt_previews(
+        graph_type=payload.graph_type,
+        prompt_values=prompt_values,
+    )
+    return GraphPromptPreviewResponse(
+        items=[GraphNodePromptPreview.model_validate(preview) for preview in previews],
+        state_slots=[
+            GraphStateSlotPreview(
+                name=slot.name,
+                label=slot.label,
+                description=slot.description,
+                kind=slot.kind.value,
+                written_by=list(slot.written_by),
+                read_by=list(slot.read_by),
+            )
+            for slot in get_graph_state_slot_contracts(payload.graph_type)
+        ],
+        prompt_fields=[
+            GraphPromptFieldPreview(
+                key=field.key,
+                label=field.label,
+                description=field.description,
+                placeholder=field.placeholder,
+            )
+            for field in get_graph_prompt_field_definitions(payload.graph_type)
+        ],
     )
 
 

@@ -18,6 +18,8 @@ export type StreamedAssistantMessage = {
   role: "assistant";
   content: string;
   node?: string;
+  node_label?: string | null;
+  state_patch?: Record<string, string>;
 };
 
 type FinalAssistantMessage = ConversationMessageRecord & {
@@ -32,6 +34,15 @@ type UserMessageEvent = {
 type DoneEvent = {
   messages: FinalAssistantMessage[];
   conversation: ConversationRecord;
+};
+
+type NodeStateEvent = {
+  node_run: {
+    node: string;
+    node_label: string;
+    output: string;
+    state_patch: Record<string, string>;
+  };
 };
 
 function parseSSEEvent(block: string): { event: string; data: Record<string, unknown> } | null {
@@ -122,6 +133,7 @@ export function useChatStream() {
     try {
       const response = await fetch(`${API_URL}/api/chat/stream`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -184,11 +196,50 @@ export function useChatStream() {
             continue;
           }
 
+          if (parsed.event === "node_state") {
+            const { node_run } = parsed.data as unknown as NodeStateEvent;
+            if (!node_run?.node) {
+              continue;
+            }
+
+            setStreamingMessages((current) => {
+              const existing = current.find((message) => message.id === node_run.node);
+              if (!existing) {
+                return [
+                  ...current,
+                  {
+                    id: node_run.node,
+                    role: "assistant",
+                    content: node_run.output || "",
+                    node: node_run.node,
+                    node_label: node_run.node_label,
+                    state_patch: node_run.state_patch ?? {},
+                  },
+                ];
+              }
+
+              return current.map((message) =>
+                message.id === node_run.node
+                  ? {
+                      ...message,
+                      content: node_run.output || message.content,
+                      node_label: node_run.node_label,
+                      state_patch: node_run.state_patch ?? {},
+                    }
+                  : message,
+              );
+            });
+            continue;
+          }
+
           if (parsed.event === "done") {
             const doneEvent = parsed.data as unknown as DoneEvent;
             appendAssistantMessagesToCache(doneEvent);
             setStreamingMessages([]);
-            await queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: queryKeys.conversations }),
+              queryClient.invalidateQueries({ queryKey: ["ai-logs"] }),
+            ]);
             break;
           }
 
@@ -207,6 +258,7 @@ export function useChatStream() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.conversation(payload.conversation_id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.conversations }),
+        queryClient.invalidateQueries({ queryKey: ["ai-logs"] }),
       ]);
     } finally {
       if (controllerRef.current === controller) {

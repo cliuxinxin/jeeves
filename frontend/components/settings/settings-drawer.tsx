@@ -1,7 +1,8 @@
 "use client";
 
-import { Network, PanelRightClose, Settings2 } from "lucide-react";
+import { Network, PanelRightClose, ScrollText, Settings2 } from "lucide-react";
 
+import { AILogsPanel } from "@/components/settings/ai-logs-panel";
 import { GraphConfigPanel } from "@/components/settings/graph-config-panel";
 import { ModelConfigPanel } from "@/components/settings/model-config-panel";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import type {
 } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 
-type SettingsSection = "model" | "graph";
+type SettingsSection = "model" | "graph" | "logs";
 
 type SettingsDrawerProps = {
   isOpen: boolean;
@@ -43,6 +44,8 @@ type SettingsDrawerProps = {
   onTestModelConfig: (payload: LLMConfigTestRequest) => Promise<LLMConfigTestResponse>;
   graphConfigs: GraphConfigRecord[];
   activeGraphConfigId: number | null;
+  activeConversationId: number | null;
+  activeConversationTitle: string | null;
   isGraphLoading: boolean;
   isGraphSaving: boolean;
   graphActivatingId: number | null;
@@ -74,6 +77,8 @@ export function SettingsDrawer({
   onTestModelConfig,
   graphConfigs,
   activeGraphConfigId,
+  activeConversationId,
+  activeConversationTitle,
   isGraphLoading,
   isGraphSaving,
   graphActivatingId,
@@ -129,6 +134,19 @@ export function SettingsDrawer({
                 <Network className="h-4 w-4" />
                 工作流配置
               </button>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
+                  section === "logs"
+                    ? "bg-slate-950 text-white"
+                    : "bg-white text-slate-700 hover:bg-slate-100",
+                )}
+                onClick={() => onSectionChange("logs")}
+              >
+                <ScrollText className="h-4 w-4" />
+                AI 日志
+              </button>
             </div>
           </aside>
 
@@ -150,7 +168,7 @@ export function SettingsDrawer({
                     onDeleteConfig={onDeleteModelConfig}
                     onTestConfig={onTestModelConfig}
                   />
-                ) : (
+                ) : section === "graph" ? (
                   <GraphConfigPanel
                     configs={graphConfigs}
                     activeConfigId={activeGraphConfigId}
@@ -161,6 +179,12 @@ export function SettingsDrawer({
                     onUpdateConfig={onUpdateGraphConfig}
                     onActivateConfig={onActivateGraphConfig}
                     onDeleteConfig={onDeleteGraphConfig}
+                  />
+                ) : (
+                  <AILogsPanel
+                    activeConversationId={activeConversationId}
+                    activeConversationTitle={activeConversationTitle}
+                    graphConfigs={graphConfigs}
                   />
                 )}
               </div>

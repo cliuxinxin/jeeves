@@ -1,13 +1,16 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .api.ai_logs import router as ai_logs_router
+from .api.auth import router as auth_router
 from .api.chat import router as chat_router
 from .api.conversations import router as conversations_router
 from .api.graph_configs import router as graph_configs_router
 from .api.llm_configs import router as llm_configs_router
 from .api.system import router as system_router
+from .auth import require_authenticated_user
 from .config import get_settings
 from .database import init_db
 from .telemetry import log_request_lifecycle
@@ -41,11 +44,14 @@ def create_app() -> FastAPI:
     async def root() -> dict[str, str]:
         return {"message": "Jeeves backend is running."}
 
+    app.include_router(auth_router)
     app.include_router(system_router)
-    app.include_router(llm_configs_router)
-    app.include_router(graph_configs_router)
-    app.include_router(conversations_router)
-    app.include_router(chat_router)
+    protected = [Depends(require_authenticated_user)]
+    app.include_router(ai_logs_router, dependencies=protected)
+    app.include_router(llm_configs_router, dependencies=protected)
+    app.include_router(graph_configs_router, dependencies=protected)
+    app.include_router(conversations_router, dependencies=protected)
+    app.include_router(chat_router, dependencies=protected)
     return app
 
 

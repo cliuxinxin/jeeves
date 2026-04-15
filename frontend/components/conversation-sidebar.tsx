@@ -52,6 +52,16 @@ export function ConversationSidebar({
                 onClick={() => onSelectConversation(conversation.id)}
               >
                 <div className="truncate pr-6 text-sm font-semibold">{conversation.title}</div>
+                {conversation.graph_config_name ? (
+                  <div
+                    className={cn(
+                      "mt-1 text-[11px] font-medium",
+                      conversation.id === activeConversationId ? "text-slate-300" : "text-slate-500",
+                    )}
+                  >
+                    工作流: {conversation.graph_config_name}
+                  </div>
+                ) : null}
                 <div
                   className={cn(
                     "mt-1 line-clamp-2 text-xs leading-5",

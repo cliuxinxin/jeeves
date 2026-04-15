@@ -9,10 +9,18 @@ import {
   getConversation,
   listConversations,
   type ConversationDetailResponse,
+  type ConversationCreateRequest,
   type ConversationRecord,
+  type ConversationUpdateRequest,
+  updateConversation,
 } from "@/lib/api/client";
 
 import { queryKeys } from "./query-keys";
+
+type CreateConversationOptions = {
+  title?: string;
+  graph_config_id?: number | null;
+};
 
 export function useConversations() {
   const queryClient = useQueryClient();
@@ -35,7 +43,7 @@ export function useConversations() {
   });
 
   const createConversationMutation = useMutation({
-    mutationFn: createConversation,
+    mutationFn: (payload: ConversationCreateRequest) => createConversation(payload),
     onSuccess: async (conversation) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
       setActiveConversationId(conversation.id);
@@ -43,6 +51,26 @@ export function useConversations() {
         conversation,
         messages: [],
       });
+    },
+  });
+
+  const updateConversationMutation = useMutation({
+    mutationFn: ({
+      conversationId,
+      payload,
+    }: {
+      conversationId: number;
+      payload: ConversationUpdateRequest;
+    }) => updateConversation(conversationId, payload),
+    onSuccess: async (conversation) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+      queryClient.setQueryData<ConversationDetailResponse>(
+        queryKeys.conversation(conversation.id),
+        (current) => ({
+          conversation,
+          messages: current?.messages ?? [],
+        }),
+      );
     },
   });
 
@@ -55,13 +83,15 @@ export function useConversations() {
   });
 
   useEffect(() => {
-    if (conversationsQuery.isLoading || createConversationMutation.isPending) {
+    if (conversationsQuery.isLoading) {
       return;
     }
 
     const items = conversationsQuery.data?.items ?? [];
-    if (items.length === 0 && !createConversationMutation.isPending) {
-      void createConversationMutation.mutateAsync();
+    if (items.length === 0) {
+      if (activeConversationId !== null) {
+        setActiveConversationId(null);
+      }
       return;
     }
 
@@ -75,8 +105,6 @@ export function useConversations() {
     activeConversationId,
     conversationsQuery.data?.items,
     conversationsQuery.isLoading,
-    createConversationMutation.isPending,
-    createConversationMutation.mutateAsync,
   ]);
 
   const activeConversation = useMemo(() => {
@@ -89,8 +117,18 @@ export function useConversations() {
     setActiveConversationId(conversationId);
   }
 
-  async function createNewConversation(): Promise<ConversationRecord> {
-    return createConversationMutation.mutateAsync();
+  async function createNewConversation(payload?: CreateConversationOptions): Promise<ConversationRecord> {
+    return createConversationMutation.mutateAsync({
+      title: payload?.title ?? "New chat",
+      graph_config_id: payload?.graph_config_id,
+    });
+  }
+
+  async function updateConversationConfig(conversationId: number, graphConfigId: number | null) {
+    return updateConversationMutation.mutateAsync({
+      conversationId,
+      payload: { graph_config_id: graphConfigId },
+    });
   }
 
   async function removeConversation(conversationId: number): Promise<void> {
@@ -104,8 +142,7 @@ export function useConversations() {
       if (fallbackConversation) {
         setActiveConversationId(fallbackConversation.id);
       } else {
-        const created = await createConversationMutation.mutateAsync();
-        setActiveConversationId(created.id);
+        setActiveConversationId(null);
       }
     }
   }
@@ -117,6 +154,7 @@ export function useConversations() {
     activeConversation,
     activeConversationDetail: conversationDetailQuery.data ?? null,
     activeConversationMessages: conversationDetailQuery.data?.messages ?? [],
+    isUpdatingConversation: updateConversationMutation.isPending,
     isBootstrapping:
       conversationsQuery.isLoading ||
       createConversationMutation.isPending ||
@@ -125,6 +163,7 @@ export function useConversations() {
     selectConversation,
     setActiveConversationId,
     createNewConversation,
+    updateConversationConfig,
     removeConversation,
   };
 }
