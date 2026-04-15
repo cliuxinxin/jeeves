@@ -212,6 +212,16 @@ npm run build
 3. 单机原型可继续使用 SQLite。
 4. 如果进入多人或生产环境，建议迁移到 PostgreSQL，并把 LLM Key 改为安全存储方案。
 
+如果你要把项目部署到一台自己的 VM，并用 GitHub Actions 自动发布，可以直接参考：
+
+- [`deploy/README.md`](deploy/README.md)
+- [`deploy/deploy.sh`](deploy/deploy.sh)
+- [`deploy/docker-compose.yml`](deploy/docker-compose.yml)
+- [`deploy/docker/nginx.conf`](deploy/docker/nginx.conf)
+- [`backend/Dockerfile`](backend/Dockerfile)
+- [`frontend/Dockerfile`](frontend/Dockerfile)
+- [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+
 ## CI
 
 GitHub Actions 已覆盖：
