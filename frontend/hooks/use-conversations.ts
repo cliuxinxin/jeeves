@@ -10,7 +10,9 @@ import {
   listConversations,
   type ConversationDetailResponse,
   type ConversationCreateRequest,
+  type ConversationListResponse,
   type ConversationRecord,
+  type ConversationSummary,
   type ConversationUpdateRequest,
   updateConversation,
 } from "@/lib/api/client";
@@ -26,6 +28,31 @@ export function useConversations() {
   const queryClient = useQueryClient();
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
 
+  function toConversationSummary(
+    conversation: ConversationRecord,
+    overrides?: Partial<ConversationSummary>,
+  ): ConversationSummary {
+    return {
+      ...conversation,
+      preview: overrides?.preview ?? "",
+      message_count: overrides?.message_count ?? 0,
+    };
+  }
+
+  function upsertConversationSummary(conversation: ConversationRecord) {
+    queryClient.setQueryData<ConversationListResponse>(queryKeys.conversations, (current) => {
+      const nextSummary = toConversationSummary(
+        conversation,
+        current?.items.find((item) => item.id === conversation.id) ?? undefined,
+      );
+
+      const remainingItems = (current?.items ?? []).filter((item) => item.id !== conversation.id);
+      return {
+        items: [nextSummary, ...remainingItems],
+      };
+    });
+  }
+
   const conversationsQuery = useQuery({
     queryKey: queryKeys.conversations,
     queryFn: ({ signal }) => listConversations(signal),
@@ -40,12 +67,16 @@ export function useConversations() {
       return getConversation(activeConversationId, signal);
     },
     enabled: activeConversationId !== null,
+    refetchOnMount: false,
   });
 
   const createConversationMutation = useMutation({
     mutationFn: (payload: ConversationCreateRequest) => createConversation(payload),
-    onSuccess: async (conversation) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.conversations });
+    },
+    onSuccess: (conversation) => {
+      upsertConversationSummary(conversation);
       setActiveConversationId(conversation.id);
       queryClient.setQueryData<ConversationDetailResponse>(queryKeys.conversation(conversation.id), {
         conversation,
@@ -62,8 +93,11 @@ export function useConversations() {
       conversationId: number;
       payload: ConversationUpdateRequest;
     }) => updateConversation(conversationId, payload),
-    onSuccess: async (conversation) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.conversations });
+    },
+    onSuccess: (conversation) => {
+      upsertConversationSummary(conversation);
       queryClient.setQueryData<ConversationDetailResponse>(
         queryKeys.conversation(conversation.id),
         (current) => ({
@@ -76,8 +110,13 @@ export function useConversations() {
 
   const deleteConversationMutation = useMutation({
     mutationFn: deleteConversation,
-    onSuccess: async (_, deletedConversationId) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.conversations });
+    },
+    onSuccess: (_, deletedConversationId) => {
+      queryClient.setQueryData<ConversationListResponse>(queryKeys.conversations, (current) => ({
+        items: (current?.items ?? []).filter((item) => item.id !== deletedConversationId),
+      }));
       queryClient.removeQueries({ queryKey: queryKeys.conversation(deletedConversationId) });
     },
   });
@@ -157,9 +196,13 @@ export function useConversations() {
     isUpdatingConversation: updateConversationMutation.isPending,
     isBootstrapping:
       conversationsQuery.isLoading ||
-      createConversationMutation.isPending ||
-      (activeConversationId !== null && conversationDetailQuery.isLoading),
-    isConversationLoading: conversationDetailQuery.isFetching && activeConversationId !== null,
+      (activeConversationId !== null &&
+        conversationDetailQuery.isLoading &&
+        conversationDetailQuery.data === undefined),
+    isConversationLoading:
+      conversationDetailQuery.isFetching &&
+      activeConversationId !== null &&
+      conversationDetailQuery.data === undefined,
     selectConversation,
     setActiveConversationId,
     createNewConversation,

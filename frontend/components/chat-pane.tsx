@@ -74,6 +74,12 @@ type InsightCardLayout = {
   }>;
 };
 
+const INSIGHT_CARD_NUMBER_PATTERN = "(?:\\d+|[一二三四五六七八九十]+)";
+const INSIGHT_CARD_TITLE_PATTERN = new RegExp(
+  `^(?:洞察)?卡片\\s*(${INSIGHT_CARD_NUMBER_PATTERN})\\s*[：:]\\s*(.+)$`,
+  "i",
+);
+
 function entriesFromStatePatch(statePatch?: Record<string, string>) {
   return Object.entries(statePatch ?? {}).filter(([, value]) => value) as StateEntry[];
 }
@@ -158,11 +164,16 @@ function filterDisplayStateEntries(entries: StateEntry[], content: string) {
   });
 }
 
-function extractInsightCardLayout(content: string): InsightCardLayout | null {
-  const normalized = normalizeMarkdown(content);
+function cleanInsightSection(text: string) {
+  return text
+    .replace(/^(?:---+|\*\*\*+|___+)\s*$/gm, "")
+    .trim();
+}
+
+function extractInsightSectionsFromMarkdownHeadings(normalized: string) {
   const headingMatches = Array.from(normalized.matchAll(/^#{2,6}\s+(.+)$/gm));
 
-  if (headingMatches.length < 2) {
+  if (headingMatches.length === 0) {
     return null;
   }
 
@@ -173,28 +184,75 @@ function extractInsightCardLayout(content: string): InsightCardLayout | null {
       const nextHeadingStart = headingMatches[index + 1]?.index ?? normalized.length;
       return {
         title: stripMarkdownInline(match[1] ?? ""),
-        body: normalized.slice(bodyStart, nextHeadingStart).trim(),
+        body: cleanInsightSection(normalized.slice(bodyStart, nextHeadingStart)),
       };
     })
     .filter((section) => section.title && section.body);
 
-  const insightSections = sections.filter((section) => /洞察卡片|卡片\s*\d+/i.test(section.title));
-  if (insightSections.length < 2) {
+  const insightSections = sections.filter((section) => INSIGHT_CARD_TITLE_PATTERN.test(section.title));
+  if (insightSections.length === 0) {
     return null;
   }
 
   const firstHeadingIndex = headingMatches[0]?.index ?? 0;
-  const preface = normalized.slice(0, firstHeadingIndex).trim();
-
   return {
-    preface: preface || null,
+    preface: cleanInsightSection(normalized.slice(0, firstHeadingIndex)) || null,
     sections: insightSections,
   };
 }
 
+function extractInsightSectionsFromPlainMarkers(normalized: string) {
+  const markerPattern = new RegExp(
+    `^(?:\\*\\*)?(?:洞察)?卡片\\s*${INSIGHT_CARD_NUMBER_PATTERN}\\s*[：:].+$`,
+    "gim",
+  );
+  const markerMatches = Array.from(normalized.matchAll(markerPattern));
+
+  if (markerMatches.length === 0) {
+    return null;
+  }
+
+  const sections = markerMatches
+    .map((match, index) => {
+      const sectionStart = match.index ?? 0;
+      const bodyStart = sectionStart + match[0].length;
+      const nextSectionStart = markerMatches[index + 1]?.index ?? normalized.length;
+      return {
+        title: stripMarkdownInline(match[0] ?? ""),
+        body: cleanInsightSection(normalized.slice(bodyStart, nextSectionStart)),
+      };
+    })
+    .filter((section) => section.title && section.body);
+
+  if (sections.length === 0) {
+    return null;
+  }
+
+  const firstMarkerIndex = markerMatches[0]?.index ?? 0;
+  const preface = cleanInsightSection(normalized.slice(0, firstMarkerIndex));
+  const hasCardLead = /洞察卡片|以下.*卡片|提炼出以下|最值得拿走/i.test(preface);
+
+  if (sections.length < 2 && !hasCardLead) {
+    return null;
+  }
+
+  return {
+    preface: preface || null,
+    sections,
+  };
+}
+
+function extractInsightCardLayout(content: string): InsightCardLayout | null {
+  const normalized = normalizeMarkdown(content);
+  return (
+    extractInsightSectionsFromMarkdownHeadings(normalized) ??
+    extractInsightSectionsFromPlainMarkers(normalized)
+  );
+}
+
 function parseInsightTitle(title: string) {
   const normalizedTitle = stripMarkdownInline(title);
-  const match = normalizedTitle.match(/^(?:洞察)?卡片\s*(\d+)\s*[：:]\s*(.+)$/);
+  const match = normalizedTitle.match(INSIGHT_CARD_TITLE_PATTERN);
   const badge = match ? `卡片 ${match[1]}` : null;
   const titleBody = match ? match[2] : normalizedTitle;
 
