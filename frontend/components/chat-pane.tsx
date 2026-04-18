@@ -46,6 +46,7 @@ type ChatPaneProps = {
   activeGraphId: number | null;
   messages: ChatPaneMessage[];
   streamingMessages: StreamedAssistantMessage[];
+  notice: string | null;
   input: string;
   error: string | null;
   isBootstrapping: boolean;
@@ -409,6 +410,7 @@ export function ChatPane({
   activeGraphId,
   messages,
   streamingMessages,
+  notice,
   input,
   error,
   isBootstrapping,
@@ -560,8 +562,14 @@ export function ChatPane({
         </div>
       </CardHeader>
 
-      <CardContent className="min-h-0 flex-1 p-0">
-        <ScrollArea className="h-full px-5 py-5 sm:px-6" viewportRef={viewportRef}>
+      <CardContent className="min-h-0 flex flex-1 flex-col p-0">
+        {notice ? (
+          <div className="border-b border-amber-200/70 bg-amber-50/80 px-5 py-3 text-sm text-amber-800 sm:px-6">
+            {notice}
+          </div>
+        ) : null}
+
+        <ScrollArea className="min-h-0 flex-1 px-5 py-5 sm:px-6" viewportRef={viewportRef}>
           {isBootstrapping || isConversationLoading ? (
             <div className="flex h-full min-h-[18rem] items-center justify-center text-sm text-slate-500">
               <span className="inline-flex items-center gap-2">

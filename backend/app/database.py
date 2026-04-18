@@ -9,6 +9,8 @@ from .graph_prompt_values import resolve_prompt_values
 from .schemas import GraphType
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+SQLITE_BUSY_TIMEOUT_MS = 5_000
+SQLITE_BUSY_TIMEOUT_SECONDS = SQLITE_BUSY_TIMEOUT_MS / 1_000
 
 
 def get_database_path() -> Path:
@@ -274,14 +276,22 @@ def init_db() -> None:
         )
 
 
+def is_sqlite_lock_error(error: BaseException) -> bool:
+    return isinstance(error, sqlite3.OperationalError) and "database is locked" in str(error).lower()
+
+
 @contextmanager
 def get_connection() -> Iterator[sqlite3.Connection]:
     database_path = get_database_path()
     database_path.parent.mkdir(parents=True, exist_ok=True)
 
-    connection = sqlite3.connect(database_path)
+    connection = sqlite3.connect(
+        database_path,
+        timeout=SQLITE_BUSY_TIMEOUT_SECONDS,
+    )
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
 
     try:
         yield connection

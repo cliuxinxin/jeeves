@@ -1,5 +1,8 @@
+import sqlite3
+
 from fastapi import APIRouter, HTTPException
 
+from ..database import is_sqlite_lock_error
 from ..repositories.conversations import (
     ConversationGraphConfigNotFoundError,
     ConversationNotFoundError,
@@ -21,9 +24,18 @@ from ..schemas import (
 router = APIRouter(tags=["conversations"])
 
 
+def _raise_if_sqlite_busy(error: sqlite3.OperationalError) -> None:
+    if is_sqlite_lock_error(error):
+        raise HTTPException(status_code=503, detail="数据库正忙，请稍后重试。") from error
+    raise error
+
+
 @router.get("/api/conversations", response_model=ConversationListResponse)
 async def get_conversations() -> ConversationListResponse:
-    return ConversationListResponse(items=list_conversations())
+    try:
+        return ConversationListResponse(items=list_conversations())
+    except sqlite3.OperationalError as exc:
+        _raise_if_sqlite_busy(exc)
 
 
 @router.post("/api/conversations", response_model=ConversationRecord, status_code=201)
@@ -38,6 +50,8 @@ async def create_conversation_endpoint(
         )
     except ConversationGraphConfigNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except sqlite3.OperationalError as exc:
+        _raise_if_sqlite_busy(exc)
 
 
 @router.get("/api/conversations/{conversation_id}", response_model=ConversationDetailResponse)
@@ -47,6 +61,8 @@ async def get_conversation_endpoint(conversation_id: int) -> ConversationDetailR
         messages = get_conversation_messages(conversation_id)
     except ConversationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except sqlite3.OperationalError as exc:
+        _raise_if_sqlite_busy(exc)
 
     return ConversationDetailResponse(conversation=conversation, messages=messages)
 
@@ -68,6 +84,8 @@ async def update_conversation_endpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ConversationGraphConfigNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except sqlite3.OperationalError as exc:
+        _raise_if_sqlite_busy(exc)
 
 
 @router.delete("/api/conversations/{conversation_id}")
@@ -76,4 +94,6 @@ async def delete_conversation_endpoint(conversation_id: int) -> dict[str, str]:
         delete_conversation(conversation_id)
     except ConversationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except sqlite3.OperationalError as exc:
+        _raise_if_sqlite_busy(exc)
     return {"status": "ok"}

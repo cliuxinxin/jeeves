@@ -97,6 +97,21 @@ def test_conversation_lifecycle(client) -> None:
     assert any(item["id"] == conversation_id for item in listing.json()["items"])
 
 
+def test_create_conversation_returns_503_when_database_is_locked(client, monkeypatch) -> None:
+    def locked_create_conversation(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(
+        "app.api.conversations.create_conversation",
+        locked_create_conversation,
+    )
+
+    response = client.post("/api/conversations", json={"title": "Busy chat"})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "数据库正忙，请稍后重试。"
+
+
 def test_llm_config_crud(client) -> None:
     created = client.post(
         "/api/llm-configs",

@@ -29,6 +29,7 @@ export default function AssistantWorkspace({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("model");
   const [chatError, setChatError] = useState<string | null>(null);
+  const [conversationActionNotice, setConversationActionNotice] = useState<string | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
 
   const runtimeStatusQuery = useRuntimeStatus();
@@ -40,6 +41,8 @@ export default function AssistantWorkspace({
   useEffect(() => {
     chatStream.cancelStream();
     chatStream.clearError();
+    setChatError(null);
+    setConversationActionNotice(null);
   }, [conversations.activeConversationId]);
 
   const messages = useMemo<ChatPaneMessage[]>(
@@ -62,6 +65,18 @@ export default function AssistantWorkspace({
     conversations.activeConversation?.graph_config_id ??
     graphConfigs.activeConfigId;
 
+  function describeError(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  function formatCreateConversationNotice(errorMessage: string) {
+    const normalized = errorMessage.trim();
+    if (!normalized || normalized === "创建对话失败。") {
+      return "没能创建新对话，当前仍停留在这个会话。";
+    }
+    return `没能创建新对话，当前仍停留在这个会话。原因：${normalized}`;
+  }
+
   async function handleSend() {
     const trimmed = input.trim();
     if (!trimmed || chatStream.isSending || !runtimeStatusQuery.data?.configured) {
@@ -69,6 +84,7 @@ export default function AssistantWorkspace({
     }
 
     setChatError(null);
+    setConversationActionNotice(null);
     chatStream.clearError();
 
     let conversationId = conversations.activeConversationId;
@@ -79,7 +95,7 @@ export default function AssistantWorkspace({
         });
         conversationId = createdConversation.id;
       } catch (error) {
-        setChatError(error instanceof Error ? error.message : "创建对话失败。");
+        setChatError(describeError(error, "创建对话失败。"));
         return;
       }
     }
@@ -95,26 +111,37 @@ export default function AssistantWorkspace({
   async function handleCreateConversation() {
     try {
       setChatError(null);
+      setConversationActionNotice(null);
+      chatStream.clearError();
       const createdConversation = await conversations.createNewConversation({
         graph_config_id: activeGraphId ?? undefined,
       });
       conversations.setActiveConversationId(createdConversation.id);
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : "创建对话失败。");
+      const message = describeError(error, "创建对话失败。");
+      if (conversations.activeConversationId !== null) {
+        setConversationActionNotice(formatCreateConversationNotice(message));
+        return;
+      }
+      setChatError(message);
     }
   }
 
   async function handleDeleteConversation(conversationId: number) {
     try {
+      chatStream.clearError();
       await conversations.removeConversation(conversationId);
       setChatError(null);
+      setConversationActionNotice(null);
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : "删除对话失败。");
+      setChatError(describeError(error, "删除对话失败。"));
     }
   }
 
   async function handleActivateGraphFromChat(configId: number) {
     try {
+      setConversationActionNotice(null);
+      chatStream.clearError();
       if (conversations.activeConversationId === null) {
         const createdConversation = await conversations.createNewConversation({
           graph_config_id: configId,
@@ -125,7 +152,7 @@ export default function AssistantWorkspace({
       }
       setChatError(null);
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : "切换工作流失败。");
+      setChatError(describeError(error, "切换工作流失败。"));
     }
   }
 
@@ -154,6 +181,7 @@ export default function AssistantWorkspace({
               activeGraphId={activeGraphId}
               messages={messages}
               streamingMessages={chatStream.streamingMessages}
+              notice={conversationActionNotice}
               input={input}
               error={combinedChatError}
               isBootstrapping={conversations.isBootstrapping || runtimeStatusQuery.isLoading}
