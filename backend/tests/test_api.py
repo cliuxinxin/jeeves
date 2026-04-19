@@ -275,7 +275,8 @@ def test_article_value_preview_returns_dynamic_card_flow(client) -> None:
     assert payload["items"][0]["prompt_preview"] == "请先判断这篇文章最值得拿走的价值路由。"
     assert "价值路由信息" in payload["items"][1]["prompt_preview"]
     assert "动态洞察卡片" in payload["items"][1]["prompt_preview"]
-    assert "### 卡片 1：标题" in payload["items"][1]["prompt_preview"]
+    assert "### 卡片 1：市场信号：短标题" in payload["items"][1]["prompt_preview"]
+    assert "每张卡片必须明确绑定到 1 个已选路由" in payload["items"][1]["prompt_preview"]
 
 
 def test_summary_analysis_preview_preserves_legacy_system_prompt_fallback(client) -> None:

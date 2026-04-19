@@ -175,7 +175,11 @@ def create_card_writer_node(base_system_prompt: str):
         return build_node_update(
             node="card_writer",
             output=output,
-            state_update={"final_output": output},
+            state_update={
+                "value_routes": list(value_routes),
+                "route_reason": route_reason,
+                "final_output": output,
+            },
             final_output=output,
         )
 

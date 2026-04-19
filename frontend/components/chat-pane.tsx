@@ -74,11 +74,50 @@ type InsightCardLayout = {
   }>;
 };
 
+type ValueRouteMeta = {
+  key: string;
+  label: string;
+  chip: string;
+};
+
 const INSIGHT_CARD_NUMBER_PATTERN = "(?:\\d+|[一二三四五六七八九十]+)";
 const INSIGHT_CARD_TITLE_PATTERN = new RegExp(
   `^(?:洞察)?卡片\\s*(${INSIGHT_CARD_NUMBER_PATTERN})\\s*[：:]\\s*(.+)$`,
   "i",
 );
+
+const VALUE_ROUTE_METAS: ValueRouteMeta[] = [
+  {
+    key: "signal",
+    label: "市场信号",
+    chip: "border border-sky-200 bg-sky-100/90 text-sky-800",
+  },
+  {
+    key: "framework",
+    label: "可复用框架",
+    chip: "border border-amber-200 bg-amber-100/90 text-amber-800",
+  },
+  {
+    key: "contrarian",
+    label: "反常识观点",
+    chip: "border border-rose-200 bg-rose-100/90 text-rose-800",
+  },
+  {
+    key: "opportunity",
+    label: "机会切口",
+    chip: "border border-emerald-200 bg-emerald-100/90 text-emerald-800",
+  },
+  {
+    key: "risk",
+    label: "风险提醒",
+    chip: "border border-orange-200 bg-orange-100/90 text-orange-800",
+  },
+  {
+    key: "expression",
+    label: "表达方式",
+    chip: "border border-violet-200 bg-violet-100/90 text-violet-800",
+  },
+];
 
 function entriesFromStatePatch(statePatch?: Record<string, string>) {
   return Object.entries(statePatch ?? {}).filter(([, value]) => value) as StateEntry[];
@@ -162,6 +201,70 @@ function filterDisplayStateEntries(entries: StateEntry[], content: string) {
     }
     return normalizeComparableText(value) !== normalizedContent;
   });
+}
+
+function getValueRouteMeta(route: string | null | undefined): ValueRouteMeta | null {
+  const normalizedRoute = (route ?? "").trim().toLowerCase();
+  if (!normalizedRoute) {
+    return null;
+  }
+
+  if (["signal", "市场信号", "新信号", "趋势信号", "信号", "市场"].includes(normalizedRoute)) {
+    return VALUE_ROUTE_METAS[0];
+  }
+  if (["framework", "可复用框架", "框架", "方法", "路径", "模型", "部署"].includes(normalizedRoute)) {
+    return VALUE_ROUTE_METAS[1];
+  }
+  if (["contrarian", "反常识观点", "反常识", "反直觉"].includes(normalizedRoute)) {
+    return VALUE_ROUTE_METAS[2];
+  }
+  if (["opportunity", "机会切口", "机会", "商业机会"].includes(normalizedRoute)) {
+    return VALUE_ROUTE_METAS[3];
+  }
+  if (["risk", "风险提醒", "风险", "盲点"].includes(normalizedRoute)) {
+    return VALUE_ROUTE_METAS[4];
+  }
+  if (["expression", "表达方式", "表达", "写法"].includes(normalizedRoute)) {
+    return VALUE_ROUTE_METAS[5];
+  }
+
+  return null;
+}
+
+function getValueRouteLabel(route: string) {
+  return getValueRouteMeta(route)?.label ?? route;
+}
+
+function normalizeInsightCategory(category: string | null) {
+  if (!category) {
+    return null;
+  }
+
+  const directMeta = getValueRouteMeta(category);
+  if (directMeta) {
+    return directMeta.label;
+  }
+
+  if (/信号|趋势|市场/.test(category)) {
+    return "市场信号";
+  }
+  if (/框架|路径|方法|部署|模型/.test(category)) {
+    return "可复用框架";
+  }
+  if (/反常识|反直觉/.test(category)) {
+    return "反常识观点";
+  }
+  if (/机会/.test(category)) {
+    return "机会切口";
+  }
+  if (/风险|盲点|不确定/.test(category)) {
+    return "风险提醒";
+  }
+  if (/表达|写法|结构|叙事/.test(category)) {
+    return "表达方式";
+  }
+
+  return category;
 }
 
 function cleanInsightSection(text: string) {
@@ -260,14 +363,14 @@ function parseInsightTitle(title: string) {
   if (segments.length >= 2 && segments[0] && segments[0].length <= 12) {
     return {
       badge,
-      category: segments[0],
+      category: normalizeInsightCategory(segments[0]),
       heading: segments.slice(1).join("："),
     };
   }
 
   return {
     badge,
-    category: null,
+    category: normalizeInsightCategory(null),
     heading: titleBody,
   };
 }
@@ -367,7 +470,7 @@ function buildCollapsedPreview(options: {
   }
 
   if (options.valueRoutes.length > 0) {
-    return options.valueRoutes.join(" · ");
+    return options.valueRoutes.map(getValueRouteLabel).join(" · ");
   }
 
   return null;
@@ -649,6 +752,14 @@ export function ChatPane({
                     const routeReasonEntry = visibleStateEntries.find(([key]) => key === "route_reason");
                     const routeReasonText = routeReasonEntry?.[1] ?? "";
                     const valueRoutes = valueRouteEntry ? parseListValue(valueRouteEntry[1]) : [];
+                    const displayValueRoutes = valueRoutes.reduce<ValueRouteMeta[]>((acc, route) => {
+                      const meta = getValueRouteMeta(route);
+                      if (!meta || acc.some((item) => item.key === meta.key)) {
+                        return acc;
+                      }
+                      acc.push(meta);
+                      return acc;
+                    }, []);
                     const extraStateEntries = visibleStateEntries.filter(
                       ([key]) => key !== "value_routes" && key !== "route_reason",
                     );
@@ -670,6 +781,11 @@ export function ChatPane({
                       routeReasonText,
                       valueRoutes,
                     });
+                    const showCompactRouteBinding =
+                      message.node === "card_writer" && Boolean(insightLayout) && displayValueRoutes.length > 0;
+                    const showStateSummaryCard =
+                      extraStateEntries.length > 0 ||
+                      (!showCompactRouteBinding && (valueRoutes.length > 0 || routeReasonEntry));
 
                     return (
                       <div
@@ -693,6 +809,21 @@ export function ChatPane({
                                   <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur">
                                     {formatNodeLabel(message.node, message.node_label)}
                                   </div>
+                                  {showCompactRouteBinding ? (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {displayValueRoutes.map((route) => (
+                                        <span
+                                          key={`${messageKey}-${route.key}`}
+                                          className={cn(
+                                            "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                                            route.chip,
+                                          )}
+                                        >
+                                          {route.label}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
                                   {isCollapsible && !isExpanded && collapsedPreview ? (
                                     <p className="mt-2 line-clamp-2 max-w-[56ch] text-xs leading-5 text-slate-500">
                                       {collapsedPreview}
@@ -724,27 +855,33 @@ export function ChatPane({
                               </div>
                             ) : null}
 
-                            {valueRoutes.length > 0 || routeReasonEntry || extraStateEntries.length > 0 ? (
+                            {showStateSummaryCard ? (
                               <div className="mb-4 rounded-[1.35rem] border border-white/80 bg-white/88 p-3 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
-                                {valueRoutes.length > 0 ? (
+                                {!showCompactRouteBinding && valueRoutes.length > 0 ? (
                                   <div>
                                     <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                                       价值路由
                                     </div>
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                      {valueRoutes.map((route) => (
+                                      {valueRoutes.map((route) => {
+                                        const meta = getValueRouteMeta(route);
+                                        return (
                                         <span
                                           key={route}
-                                          className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700"
+                                          className={cn(
+                                            "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                                            meta?.chip ?? "bg-slate-100 text-slate-700",
+                                          )}
                                         >
-                                          {route}
+                                          {meta?.label ?? route}
                                         </span>
-                                      ))}
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 ) : null}
 
-                                {routeReasonEntry ? (
+                                {!showCompactRouteBinding && routeReasonEntry ? (
                                   <div className={cn(valueRoutes.length > 0 ? "mt-3 border-t border-slate-200/80 pt-3" : null)}>
                                     <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                                       路由说明
