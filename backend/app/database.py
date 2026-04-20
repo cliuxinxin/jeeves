@@ -111,6 +111,23 @@ def init_db() -> None:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS liked_cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                source_message_id INTEGER NOT NULL,
+                card_index INTEGER NOT NULL,
+                route_label TEXT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(source_message_id, card_index),
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (source_message_id) REFERENCES conversation_messages(id) ON DELETE CASCADE
+            )
+            """
+        )
+        connection.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation_id
             ON conversation_messages (conversation_id)
             """
@@ -149,6 +166,18 @@ def init_db() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_ai_logs_request_id
             ON ai_logs (request_id, created_at DESC)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_liked_cards_created_at
+            ON liked_cards (created_at DESC, id DESC)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_liked_cards_conversation_id
+            ON liked_cards (conversation_id, created_at DESC)
             """
         )
 

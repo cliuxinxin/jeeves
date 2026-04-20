@@ -1,9 +1,10 @@
 "use client";
 
-import { Network, PanelRightClose, ScrollText, Settings2 } from "lucide-react";
+import { Heart, Network, PanelRightClose, ScrollText, Settings2 } from "lucide-react";
 
 import { AILogsPanel } from "@/components/settings/ai-logs-panel";
 import { GraphConfigPanel } from "@/components/settings/graph-config-panel";
+import { LikedCardsPanel } from "@/components/settings/liked-cards-panel";
 import { ModelConfigPanel } from "@/components/settings/model-config-panel";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,7 +21,7 @@ import type {
 } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 
-type SettingsSection = "model" | "graph" | "logs";
+type SettingsSection = "model" | "graph" | "logs" | "likes";
 
 type SettingsDrawerProps = {
   isOpen: boolean;
@@ -138,6 +139,19 @@ export function SettingsDrawer({
                 type="button"
                 className={cn(
                   "flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
+                  section === "likes"
+                    ? "bg-slate-950 text-white"
+                    : "bg-white text-slate-700 hover:bg-slate-100",
+                )}
+                onClick={() => onSectionChange("likes")}
+              >
+                <Heart className="h-4 w-4" />
+                好卡片
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
                   section === "logs"
                     ? "bg-slate-950 text-white"
                     : "bg-white text-slate-700 hover:bg-slate-100",
@@ -180,6 +194,8 @@ export function SettingsDrawer({
                     onActivateConfig={onActivateGraphConfig}
                     onDeleteConfig={onDeleteGraphConfig}
                   />
+                ) : section === "likes" ? (
+                  <LikedCardsPanel />
                 ) : (
                   <AILogsPanel
                     activeConversationId={activeConversationId}

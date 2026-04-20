@@ -112,6 +112,47 @@ def test_create_conversation_returns_503_when_database_is_locked(client, monkeyp
     assert response.json()["detail"] == "数据库正忙，请稍后重试。"
 
 
+def test_liked_card_lifecycle(client) -> None:
+    from app.repositories.conversations import append_message
+
+    conversation = client.post("/api/conversations", json={"title": "Card source"}).json()
+    source_message = append_message(
+        conversation["id"],
+        "assistant",
+        "### 卡片 1：市场信号：价格异动\n\n这是一张值得收藏的卡片。",
+        node="card_writer",
+        node_label="阶段 2 · 洞察卡片",
+    )
+
+    created = client.post(
+        "/api/liked-cards",
+        json={
+            "conversation_id": conversation["id"],
+            "source_message_id": source_message.id,
+            "card_index": 1,
+            "route_label": "市场信号",
+            "title": "价格异动",
+            "content": "这是一张值得收藏的卡片。",
+        },
+    )
+    listed = client.get("/api/liked-cards")
+    filtered = client.get(
+        "/api/liked-cards",
+        params={"conversation_id": conversation["id"]},
+    )
+    deleted = client.delete(f"/api/liked-cards/{created.json()['id']}")
+    listed_after_delete = client.get("/api/liked-cards")
+
+    assert created.status_code == 201
+    assert created.json()["conversation_title"] == "Card source"
+    assert created.json()["route_label"] == "市场信号"
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["title"] == "价格异动"
+    assert filtered.json()["items"][0]["source_message_id"] == source_message.id
+    assert deleted.status_code == 200
+    assert listed_after_delete.json()["items"] == []
+
+
 def test_llm_config_crud(client) -> None:
     created = client.post(
         "/api/llm-configs",

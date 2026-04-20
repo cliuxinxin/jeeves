@@ -106,6 +106,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/liked-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Liked Cards */
+        get: operations["get_liked_cards_api_liked_cards_get"];
+        put?: never;
+        /** Create Liked Card Endpoint */
+        post: operations["create_liked_card_endpoint_api_liked_cards_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/liked-cards/{liked_card_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Liked Card Endpoint */
+        delete: operations["delete_liked_card_endpoint_api_liked_cards__liked_card_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/llm-configs": {
         parameters: {
             query?: never;
@@ -801,6 +836,47 @@ export interface components {
              */
             max_retries: number;
         };
+        /** LikedCardCreateRequest */
+        LikedCardCreateRequest: {
+            /** Conversation Id */
+            conversation_id: number;
+            /** Source Message Id */
+            source_message_id: number;
+            /** Card Index */
+            card_index: number;
+            /** Route Label */
+            route_label?: string | null;
+            /** Title */
+            title: string;
+            /** Content */
+            content: string;
+        };
+        /** LikedCardListResponse */
+        LikedCardListResponse: {
+            /** Items */
+            items: components["schemas"]["LikedCardRecord"][];
+        };
+        /** LikedCardRecord */
+        LikedCardRecord: {
+            /** Id */
+            id: number;
+            /** Conversation Id */
+            conversation_id: number;
+            /** Conversation Title */
+            conversation_title?: string | null;
+            /** Source Message Id */
+            source_message_id: number;
+            /** Card Index */
+            card_index: number;
+            /** Route Label */
+            route_label?: string | null;
+            /** Title */
+            title: string;
+            /** Content */
+            content: string;
+            /** Created At */
+            created_at: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -961,6 +1037,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AILogListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_liked_cards_api_liked_cards_get: {
+        parameters: {
+            query?: {
+                conversation_id?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LikedCardListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_liked_card_endpoint_api_liked_cards_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LikedCardCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LikedCardRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_liked_card_endpoint_api_liked_cards__liked_card_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                liked_card_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
             /** @description Validation Error */

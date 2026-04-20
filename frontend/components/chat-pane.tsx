@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  Heart,
   LoaderCircle,
   LogOut,
   PanelRightClose,
@@ -23,7 +24,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { GraphConfigRecord, HealthResponse } from "@/lib/api/client";
+import type {
+  GraphConfigRecord,
+  HealthResponse,
+  LikedCardCreateRequest,
+  LikedCardRecord,
+} from "@/lib/api/client";
 import { copyElementAsImage } from "@/lib/copy-element-as-image";
 import { formatNodeLabel, stageAccentClass } from "@/lib/node-ui";
 import type { StreamedAssistantMessage } from "@/hooks/use-chat-stream";
@@ -41,11 +47,14 @@ export type ChatPaneMessage = {
 
 type ChatPaneProps = {
   title: string;
+  activeConversationId: number | null;
   runtimeStatus: HealthResponse | null;
   graphConfigs: GraphConfigRecord[];
   activeGraphId: number | null;
   messages: ChatPaneMessage[];
   streamingMessages: StreamedAssistantMessage[];
+  likedCardBySource: Map<string, LikedCardRecord>;
+  isLikeMutating: boolean;
   notice: string | null;
   input: string;
   error: string | null;
@@ -55,7 +64,10 @@ type ChatPaneProps = {
   onInputChange: (value: string) => void;
   onSend: () => void;
   onNewConversation: () => void;
+  onLikeInsightCard: (payload: LikedCardCreateRequest) => Promise<void>;
+  onUnlikeLikedCard: (likedCardId: number) => Promise<void>;
   onOpenSettings: () => void;
+  onOpenLikedCards: () => void;
   onToggleTrace: () => void;
   onActivateGraphConfig: (configId: number) => void;
   isTraceOpen: boolean;
@@ -233,6 +245,10 @@ function getValueRouteMeta(route: string | null | undefined): ValueRouteMeta | n
 
 function getValueRouteLabel(route: string) {
   return getValueRouteMeta(route)?.label ?? route;
+}
+
+function getLikedCardSourceKey(sourceMessageId: number, cardIndex: number) {
+  return `${sourceMessageId}:${cardIndex}`;
 }
 
 function normalizeInsightCategory(category: string | null) {
@@ -566,11 +582,14 @@ function MarkdownBlock({ content, className }: { content: string; className?: st
 
 export function ChatPane({
   title,
+  activeConversationId,
   runtimeStatus,
   graphConfigs,
   activeGraphId,
   messages,
   streamingMessages,
+  likedCardBySource,
+  isLikeMutating,
   notice,
   input,
   error,
@@ -580,7 +599,10 @@ export function ChatPane({
   onInputChange,
   onSend,
   onNewConversation,
+  onLikeInsightCard,
+  onUnlikeLikedCard,
   onOpenSettings,
+  onOpenLikedCards,
   onToggleTrace,
   onActivateGraphConfig,
   isTraceOpen,
@@ -711,6 +733,10 @@ export function ChatPane({
             <Button type="button" variant="secondary" className="h-10 px-3" onClick={onNewConversation}>
               <Plus className="h-4 w-4" />
               新对话
+            </Button>
+            <Button type="button" variant="secondary" className="h-10 px-3" onClick={onOpenLikedCards}>
+              <Heart className="h-4 w-4" />
+              好卡片
             </Button>
             <Button type="button" variant="secondary" className="h-10 px-3" onClick={onToggleTrace}>
               {isTraceOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
@@ -925,7 +951,17 @@ export function ChatPane({
                                     const lead = extractLeadQuestion(section.body);
                                     const tone = getInsightTone(titleMeta.category, index);
                                     const cardKey = `${messageKey}-${index}`;
+                                    const cardIndex = index + 1;
+                                    const sourceMessageId = typeof message.id === "number" ? message.id : null;
+                                    const likedCard =
+                                      sourceMessageId === null
+                                        ? null
+                                        : likedCardBySource.get(getLikedCardSourceKey(sourceMessageId, cardIndex)) ?? null;
                                     const cardCopyState = copyState[cardKey] ?? "idle";
+                                    const canLikeCard = activeConversationId !== null && sourceMessageId !== null;
+                                    const likedCardContent = lead.question
+                                      ? `**${lead.question}**\n\n${lead.content}`
+                                      : lead.content;
 
                                     return (
                                       <section
@@ -954,6 +990,44 @@ export function ChatPane({
                                             </div>
                                           </div>
                                           <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                if (
+                                                  activeConversationId === null ||
+                                                  sourceMessageId === null ||
+                                                  isLikeMutating
+                                                ) {
+                                                  return;
+                                                }
+                                                if (likedCard) {
+                                                  void onUnlikeLikedCard(likedCard.id);
+                                                  return;
+                                                }
+                                                void onLikeInsightCard({
+                                                  conversation_id: activeConversationId,
+                                                  source_message_id: sourceMessageId,
+                                                  card_index: cardIndex,
+                                                  route_label: titleMeta.category,
+                                                  title: titleMeta.heading,
+                                                  content: likedCardContent,
+                                                });
+                                              }}
+                                              disabled={!canLikeCard || isLikeMutating}
+                                              data-exclude-from-image="true"
+                                              className={cn(
+                                                "inline-flex items-center gap-1.5 rounded-full border bg-white/90 px-2.5 py-1 text-[11px] font-medium transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60",
+                                                likedCard ? "border-rose-200 text-rose-700" : tone.badge,
+                                              )}
+                                              aria-label={likedCard ? "取消点赞卡片" : "点赞卡片"}
+                                              title={canLikeCard ? undefined : "生成完成后可以点赞"}
+                                            >
+                                              <Heart
+                                                className="h-3.5 w-3.5"
+                                                fill={likedCard ? "currentColor" : "none"}
+                                              />
+                                              {likedCard ? "已赞" : "点赞"}
+                                            </button>
                                             <button
                                               type="button"
                                               onClick={() => void handleCopyInsightCard(cardKey)}
@@ -985,7 +1059,7 @@ export function ChatPane({
                                                     : "复制图片"}
                                             </button>
                                             <div className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium", tone.badge)}>
-                                              {titleMeta.badge ?? `卡片 ${index + 1}`}
+                                              {titleMeta.badge ?? `卡片 ${cardIndex}`}
                                             </div>
                                           </div>
                                         </div>

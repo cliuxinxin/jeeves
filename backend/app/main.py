@@ -8,6 +8,7 @@ from .api.auth import router as auth_router
 from .api.chat import router as chat_router
 from .api.conversations import router as conversations_router
 from .api.graph_configs import router as graph_configs_router
+from .api.liked_cards import router as liked_cards_router
 from .api.llm_configs import router as llm_configs_router
 from .api.system import router as system_router
 from .auth import require_authenticated_user
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(system_router)
     protected = [Depends(require_authenticated_user)]
     app.include_router(ai_logs_router, dependencies=protected)
+    app.include_router(liked_cards_router, dependencies=protected)
     app.include_router(llm_configs_router, dependencies=protected)
     app.include_router(graph_configs_router, dependencies=protected)
     app.include_router(conversations_router, dependencies=protected)

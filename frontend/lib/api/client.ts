@@ -16,6 +16,9 @@ export type ConversationDetailResponse = components["schemas"]["ConversationDeta
 export type ConversationListResponse = components["schemas"]["ConversationListResponse"];
 export type ConversationCreateRequest = components["schemas"]["ConversationCreateRequest"];
 export type ConversationUpdateRequest = components["schemas"]["ConversationUpdateRequest"];
+export type LikedCardCreateRequest = components["schemas"]["LikedCardCreateRequest"];
+export type LikedCardRecord = components["schemas"]["LikedCardRecord"];
+export type LikedCardListResponse = components["schemas"]["LikedCardListResponse"];
 export type ChatRequest = components["schemas"]["ChatRequest"];
 export type ChatResponse = components["schemas"]["ChatResponse"];
 export type ChatStreamRequest = components["schemas"]["ChatStreamRequest"];
@@ -131,6 +134,35 @@ export async function deleteConversation(conversationId: number): Promise<void> 
   });
   if (error) {
     throw new Error(extractErrorMessage(error) ?? "删除对话失败。");
+  }
+}
+
+export async function listLikedCards(
+  filters: {
+    conversation_id?: number;
+    limit?: number;
+  } = {},
+  signal?: AbortSignal,
+): Promise<LikedCardListResponse> {
+  return unwrap(
+    client.GET("/api/liked-cards", {
+      params: { query: filters },
+      signal,
+    }),
+    "加载好卡片失败。",
+  );
+}
+
+export async function createLikedCard(body: LikedCardCreateRequest): Promise<LikedCardRecord> {
+  return unwrap(client.POST("/api/liked-cards", { body }), "点赞卡片失败。");
+}
+
+export async function deleteLikedCard(likedCardId: number): Promise<void> {
+  const { error } = await client.DELETE("/api/liked-cards/{liked_card_id}", {
+    params: { path: { liked_card_id: likedCardId } },
+  });
+  if (error) {
+    throw new Error(extractErrorMessage(error) ?? "取消点赞失败。");
   }
 }
 

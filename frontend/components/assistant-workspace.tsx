@@ -9,10 +9,12 @@ import { SettingsDrawer } from "@/components/settings/settings-drawer";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useConversations } from "@/hooks/use-conversations";
 import { useGraphConfigs } from "@/hooks/use-graph-configs";
+import { useLikedCards } from "@/hooks/use-liked-cards";
 import { useLLMConfigs } from "@/hooks/use-llm-configs";
 import { useRuntimeStatus } from "@/hooks/use-runtime-status";
+import type { LikedCardCreateRequest } from "@/lib/api/client";
 
-type SettingsSection = "model" | "graph" | "logs";
+type SettingsSection = "model" | "graph" | "logs" | "likes";
 
 type AssistantWorkspaceProps = {
   authUsername?: string | null;
@@ -37,6 +39,10 @@ export default function AssistantWorkspace({
   const llmConfigs = useLLMConfigs();
   const graphConfigs = useGraphConfigs();
   const chatStream = useChatStream();
+  const likedCards = useLikedCards({
+    conversationId: conversations.activeConversationId,
+    enabled: conversations.activeConversationId !== null,
+  });
 
   useEffect(() => {
     chatStream.cancelStream();
@@ -156,6 +162,24 @@ export default function AssistantWorkspace({
     }
   }
 
+  async function handleLikeInsightCard(payload: LikedCardCreateRequest) {
+    try {
+      setChatError(null);
+      await likedCards.likeCard(payload);
+    } catch (error) {
+      setChatError(describeError(error, "点赞卡片失败。"));
+    }
+  }
+
+  async function handleUnlikeLikedCard(likedCardId: number) {
+    try {
+      setChatError(null);
+      await likedCards.unlikeCard(likedCardId);
+    } catch (error) {
+      setChatError(describeError(error, "取消点赞失败。"));
+    }
+  }
+
   function openSettings(section: SettingsSection = "model") {
     setSettingsSection(section);
     setSettingsOpen(true);
@@ -176,11 +200,14 @@ export default function AssistantWorkspace({
           <div className="min-h-0 min-w-0 flex-1">
             <ChatPane
               title={conversations.activeConversation?.title ?? "New chat"}
+              activeConversationId={conversations.activeConversationId}
               runtimeStatus={runtimeStatusQuery.data ?? null}
               graphConfigs={graphConfigs.configs}
               activeGraphId={activeGraphId}
               messages={messages}
               streamingMessages={chatStream.streamingMessages}
+              likedCardBySource={likedCards.likedCardBySource}
+              isLikeMutating={likedCards.likingCard || likedCards.unlikingCard}
               notice={conversationActionNotice}
               input={input}
               error={combinedChatError}
@@ -190,7 +217,10 @@ export default function AssistantWorkspace({
               onInputChange={setInput}
               onSend={() => void handleSend()}
               onNewConversation={() => void handleCreateConversation()}
+              onLikeInsightCard={handleLikeInsightCard}
+              onUnlikeLikedCard={handleUnlikeLikedCard}
               onOpenSettings={() => openSettings("model")}
+              onOpenLikedCards={() => openSettings("likes")}
               onToggleTrace={() => setTraceOpen((current) => !current)}
               onActivateGraphConfig={(configId) => void handleActivateGraphFromChat(configId)}
               isTraceOpen={traceOpen}

@@ -219,6 +219,41 @@ class ConversationUpdateRequest(BaseModel):
         return _strip_optional(value)
 
 
+class LikedCardCreateRequest(BaseModel):
+    conversation_id: int = Field(ge=1)
+    source_message_id: int = Field(ge=1)
+    card_index: int = Field(ge=1)
+    route_label: str | None = Field(default=None, max_length=80)
+    title: str = Field(min_length=1, max_length=300)
+    content: str = Field(min_length=1)
+
+    @field_validator("title", "content", mode="before")
+    @classmethod
+    def strip_required_strings(cls, value: str) -> str:
+        return _strip_required(value)
+
+    @field_validator("route_label", mode="before")
+    @classmethod
+    def strip_optional_route_label(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+
+class LikedCardRecord(BaseModel):
+    id: int
+    conversation_id: int
+    conversation_title: str | None = None
+    source_message_id: int
+    card_index: int
+    route_label: str | None = None
+    title: str
+    content: str
+    created_at: str
+
+
+class LikedCardListResponse(BaseModel):
+    items: list[LikedCardRecord]
+
+
 class GraphConfigCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     graph_type: GraphType
