@@ -114,11 +114,19 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS liked_cards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 conversation_id INTEGER NOT NULL,
+                graph_config_id INTEGER,
+                graph_config_name TEXT,
+                graph_type TEXT,
                 source_message_id INTEGER NOT NULL,
+                source_request_id TEXT,
+                source_node_name TEXT,
+                source_node_label TEXT,
+                source_state_patch TEXT NOT NULL DEFAULT '{}',
                 card_index INTEGER NOT NULL,
                 route_label TEXT,
                 title TEXT NOT NULL,
                 content TEXT NOT NULL,
+                workflow_snapshot TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(source_message_id, card_index),
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
@@ -219,6 +227,30 @@ def init_db() -> None:
                 (dumps({}, ensure_ascii=False),),
             )
 
+        liked_card_cols = {
+            row[1] for row in connection.execute("PRAGMA table_info(liked_cards)").fetchall()
+        }
+        if "graph_config_id" not in liked_card_cols:
+            connection.execute("ALTER TABLE liked_cards ADD COLUMN graph_config_id INTEGER")
+        if "graph_config_name" not in liked_card_cols:
+            connection.execute("ALTER TABLE liked_cards ADD COLUMN graph_config_name TEXT")
+        if "graph_type" not in liked_card_cols:
+            connection.execute("ALTER TABLE liked_cards ADD COLUMN graph_type TEXT")
+        if "source_node_name" not in liked_card_cols:
+            connection.execute("ALTER TABLE liked_cards ADD COLUMN source_node_name TEXT")
+        if "source_request_id" not in liked_card_cols:
+            connection.execute("ALTER TABLE liked_cards ADD COLUMN source_request_id TEXT")
+        if "source_node_label" not in liked_card_cols:
+            connection.execute("ALTER TABLE liked_cards ADD COLUMN source_node_label TEXT")
+        if "source_state_patch" not in liked_card_cols:
+            connection.execute(
+                "ALTER TABLE liked_cards ADD COLUMN source_state_patch TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "workflow_snapshot" not in liked_card_cols:
+            connection.execute(
+                "ALTER TABLE liked_cards ADD COLUMN workflow_snapshot TEXT NOT NULL DEFAULT '{}'"
+            )
+
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_conversations_graph_config_id
@@ -306,7 +338,9 @@ def init_db() -> None:
 
 
 def is_sqlite_lock_error(error: BaseException) -> bool:
-    return isinstance(error, sqlite3.OperationalError) and "database is locked" in str(error).lower()
+    return (
+        isinstance(error, sqlite3.OperationalError) and "database is locked" in str(error).lower()
+    )
 
 
 @contextmanager

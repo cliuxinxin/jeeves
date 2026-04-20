@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -242,11 +242,19 @@ class LikedCardRecord(BaseModel):
     id: int
     conversation_id: int
     conversation_title: str | None = None
+    graph_config_id: int | None = None
+    graph_config_name: str | None = None
+    graph_type: str | None = None
     source_message_id: int
+    source_request_id: str | None = None
+    source_node_name: str | None = None
+    source_node_label: str | None = None
+    source_state_patch: dict[str, Any] = Field(default_factory=dict)
     card_index: int
     route_label: str | None = None
     title: str
     content: str
+    workflow_snapshot: dict[str, Any] = Field(default_factory=dict)
     created_at: str
 
 

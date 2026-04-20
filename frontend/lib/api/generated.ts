@@ -864,8 +864,24 @@ export interface components {
             conversation_id: number;
             /** Conversation Title */
             conversation_title?: string | null;
+            /** Graph Config Id */
+            graph_config_id?: number | null;
+            /** Graph Config Name */
+            graph_config_name?: string | null;
+            /** Graph Type */
+            graph_type?: string | null;
             /** Source Message Id */
             source_message_id: number;
+            /** Source Request Id */
+            source_request_id?: string | null;
+            /** Source Node Name */
+            source_node_name?: string | null;
+            /** Source Node Label */
+            source_node_label?: string | null;
+            /** Source State Patch */
+            source_state_patch?: {
+                [key: string]: unknown;
+            };
             /** Card Index */
             card_index: number;
             /** Route Label */
@@ -874,6 +890,10 @@ export interface components {
             title: string;
             /** Content */
             content: string;
+            /** Workflow Snapshot */
+            workflow_snapshot?: {
+                [key: string]: unknown;
+            };
             /** Created At */
             created_at: string;
         };

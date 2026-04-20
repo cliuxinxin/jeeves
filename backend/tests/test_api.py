@@ -113,15 +113,54 @@ def test_create_conversation_returns_503_when_database_is_locked(client, monkeyp
 
 
 def test_liked_card_lifecycle(client) -> None:
+    from app.repositories.ai_logs import create_ai_log
     from app.repositories.conversations import append_message
+    from app.schemas import AILogStatus
 
     conversation = client.post("/api/conversations", json={"title": "Card source"}).json()
+    create_ai_log(
+        request_id="req-card-1",
+        conversation_id=conversation["id"],
+        conversation_title=conversation["title"],
+        graph_config_id=conversation["graph_config_id"],
+        graph_config_name=conversation["graph_config_name"],
+        node_name="value_router",
+        operation="graph_node",
+        llm_source="database",
+        llm_config_name="Primary",
+        model="test-model",
+        status=AILogStatus.SUCCESS,
+        attempt_count=1,
+        duration_ms=12.5,
+        input_messages=[{"role": "system", "content": "路由提示词"}],
+        response_text="【价值路由：signal】",
+        error_message=None,
+    )
     source_message = append_message(
         conversation["id"],
         "assistant",
         "### 卡片 1：市场信号：价格异动\n\n这是一张值得收藏的卡片。",
         node="card_writer",
         node_label="阶段 2 · 洞察卡片",
+        state_patch={"value_routes": '["signal"]', "route_reason": "价格出现异常波动"},
+    )
+    create_ai_log(
+        request_id="req-card-1",
+        conversation_id=conversation["id"],
+        conversation_title=conversation["title"],
+        graph_config_id=conversation["graph_config_id"],
+        graph_config_name=conversation["graph_config_name"],
+        node_name="card_writer",
+        operation="graph_node",
+        llm_source="database",
+        llm_config_name="Primary",
+        model="test-model",
+        status=AILogStatus.SUCCESS,
+        attempt_count=1,
+        duration_ms=28.0,
+        input_messages=[{"role": "system", "content": "卡片生成提示词"}],
+        response_text=source_message.content,
+        error_message=None,
     )
 
     created = client.post(
@@ -146,8 +185,21 @@ def test_liked_card_lifecycle(client) -> None:
     assert created.status_code == 201
     assert created.json()["conversation_title"] == "Card source"
     assert created.json()["route_label"] == "市场信号"
+    assert created.json()["source_request_id"] == "req-card-1"
+    assert created.json()["source_node_name"] == "card_writer"
+    assert created.json()["source_state_patch"]["route_reason"] == "价格出现异常波动"
+    assert created.json()["workflow_snapshot"]["generation"]["request_id"] == "req-card-1"
+    assert len(created.json()["workflow_snapshot"]["generation"]["logs"]) == 2
+    assert (
+        created.json()["workflow_snapshot"]["generation"]["logs"][1]["input_messages"][0]["content"]
+        == "卡片生成提示词"
+    )
     assert listed.status_code == 200
     assert listed.json()["items"][0]["title"] == "价格异动"
+    assert (
+        listed.json()["items"][0]["workflow_snapshot"]["generation"]["logs"][0]["node_name"]
+        == "value_router"
+    )
     assert filtered.json()["items"][0]["source_message_id"] == source_message.id
     assert deleted.status_code == 200
     assert listed_after_delete.json()["items"] == []
