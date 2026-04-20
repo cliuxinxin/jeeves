@@ -10,6 +10,7 @@ BACKEND_DIR="${APP_DIR}/backend"
 COMPOSE_FILE="${APP_DIR}/deploy/docker-compose.yml"
 COMPOSE_ENV_FILE="${APP_DIR}/deploy/.env.compose"
 COMPOSE_CMD=()
+COMPOSE_IS_LEGACY=0
 
 export PATH="${HOME}/.local/bin:${PATH}"
 
@@ -41,6 +42,7 @@ detect_compose() {
 
   if command -v docker-compose >/dev/null 2>&1; then
     COMPOSE_CMD=(docker-compose)
+    COMPOSE_IS_LEGACY=1
     return
   fi
 
@@ -57,14 +59,23 @@ require_file "${BACKEND_DIR}/.env"
 require_file "${COMPOSE_FILE}"
 require_file "${COMPOSE_ENV_FILE}"
 
-log "Updating repository"
 cd "${APP_DIR}"
-git fetch --all --prune
-git checkout "${DEPLOY_BRANCH}"
-git pull --ff-only origin "${DEPLOY_BRANCH}"
+if [[ "${SKIP_REPO_UPDATE:-0}" == "1" ]]; then
+  log "Repository already updated"
+else
+  log "Updating repository"
+  git fetch --all --prune
+  git checkout "${DEPLOY_BRANCH}"
+  git pull --ff-only origin "${DEPLOY_BRANCH}"
+fi
 
 log "Building Docker images"
 "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" build --pull
+
+if [[ "${COMPOSE_IS_LEGACY}" == "1" ]]; then
+  log "Stopping existing containers for legacy docker-compose compatibility"
+  "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" down --remove-orphans
+fi
 
 log "Starting containers"
 "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" up -d --remove-orphans

@@ -25,4 +25,9 @@ jobs:
           script: |
             export APP_DIR="${{ vars.APP_DIR || '/srv/jeeves' }}"
             export DEPLOY_BRANCH="${{ vars.DEPLOY_BRANCH || 'main' }}"
+            cd "${APP_DIR}"
+            git fetch --all --prune
+            git checkout "${DEPLOY_BRANCH}"
+            git pull --ff-only origin "${DEPLOY_BRANCH}"
+            export SKIP_REPO_UPDATE=1
             /usr/bin/env bash "${APP_DIR}/deploy/deploy.sh"

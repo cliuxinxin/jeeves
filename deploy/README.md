@@ -23,6 +23,8 @@ newgrp docker
 docker compose version || docker-compose version
 ```
 
+优先使用 `docker compose` v2。旧版 `docker-compose` v1.29.2 在新版 Docker 上可能会在重建容器时报 `KeyError: 'ContainerConfig'`。部署脚本已经做了兼容：如果服务器只有 v1，会先停止并移除旧容器再启动新容器，但不会删除 Docker volume，所以 SQLite 数据仍会保留。
+
 如果这里提示没有 compose，再补装一个：
 
 ```bash
@@ -170,9 +172,10 @@ cat ~/.ssh/jeeves_deploy
 部署时会做这些事：
 
 1. SSH 登录服务器
-2. `git pull`
+2. 先在服务器上 `git pull` 到最新代码，再执行最新的 `deploy/deploy.sh`
 3. `docker compose build --pull`
-4. `docker compose up -d --remove-orphans`
+4. 如果服务器只有旧 `docker-compose` v1，先 `down --remove-orphans` 避免重建容器时报 `ContainerConfig`
+5. `docker compose up -d --remove-orphans`
 
 ## 8. 这套 Docker 部署里“虚拟环境”怎么理解
 
