@@ -1,4 +1,4 @@
-# Docker VM Auto Deploy
+# Docker VM Manual Deploy
 
 这套方案默认：
 
@@ -162,9 +162,9 @@ cat ~/.ssh/jeeves_deploy
 
 - `.github/workflows/deploy.yml`
 
-它会在两种情况下触发：
+它会在两种情况下直接部署，不再等待 `CI` workflow：
 
-- 你往 `main` 推代码，且 `CI` workflow 成功后
+- 你往 `main` 推代码
 - 你在 GitHub 的 `Actions` 页面手动触发 `Deploy`
 
 部署时会做这些事：
