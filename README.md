@@ -190,7 +190,9 @@ npm run dev:phone
 http://192.168.1.23:3000/mobile
 ```
 
-移动端入口支持添加到手机主屏幕。前端会优先使用同源 `/api` 访问后端，并由 Next.js 代理到 `BACKEND_URL`，因此手机不会把 API 请求打到手机自己的 `localhost`。本地默认 `BACKEND_URL=http://localhost:8000`，后端仍按原方式启动即可。
+移动端入口支持添加到手机主屏幕。前端会优先使用同源 `/api` 访问后端，并由 Next.js 代理到 `BACKEND_URL`，因此手机不会把 API 请求打到手机自己的 `localhost`。本地默认 `BACKEND_URL=http://127.0.0.1:8000`，后端仍按原方式启动即可。
+
+如果手机一直停在“正在检查登录状态”，先在手机浏览器打开 `http://电脑局域网 IP:3000/api/auth/session`。正常会看到 `{"authenticated":false,"username":null}`；如果打不开，请确认前端已重启、后端已启动，并且手机和电脑在同一个网络。
 
 ## 检查与测试
 

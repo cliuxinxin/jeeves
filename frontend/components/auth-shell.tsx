@@ -20,6 +20,8 @@ type AuthShellProps = {
   variant?: "auto" | "desktop" | "mobile";
 };
 
+const sessionCheckTimeoutMs = 8000;
+
 export function AuthShell({ variant = "auto" }: AuthShellProps) {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<AuthSessionResponse | null>(null);
@@ -34,20 +36,32 @@ export function AuthShell({ variant = "auto" }: AuthShellProps) {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     async function loadSession() {
+      const timeoutId = window.setTimeout(() => controller.abort(), sessionCheckTimeoutMs);
+
       try {
-        const nextSession = await getAuthSession();
+        const nextSession = await getAuthSession(controller.signal);
         if (!cancelled) {
           setSession(nextSession);
           setError(null);
         }
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "加载登录状态失败。");
+          const isTimeout =
+            loadError instanceof DOMException && loadError.name === "AbortError";
+          setError(
+            isTimeout
+              ? "登录状态检查超时。请确认后端已启动，并重启前端服务后再用手机访问。"
+              : loadError instanceof Error
+                ? loadError.message
+                : "加载登录状态失败。",
+          );
           setSession({ authenticated: false, username: null });
         }
       } finally {
+        window.clearTimeout(timeoutId);
         if (!cancelled) {
           setIsLoading(false);
         }
@@ -58,6 +72,7 @@ export function AuthShell({ variant = "auto" }: AuthShellProps) {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, []);
 
