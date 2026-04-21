@@ -189,20 +189,26 @@ export function MobileAssistantApp({
         </div>
       ) : null}
 
-      <main className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col gap-3 p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
-        <header className="flex shrink-0 items-center justify-between gap-3 rounded-[1.75rem] border border-white/70 bg-white/75 px-3 py-2 shadow-[0_14px_34px_rgba(15,23,42,0.10)] backdrop-blur-xl">
-          <Button type="button" size="icon" variant="secondary" onClick={() => setMenuOpen(true)}>
+      <main className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col gap-2 p-2 pt-[calc(env(safe-area-inset-top)+0.55rem)]">
+        <header className="flex shrink-0 items-center justify-between gap-3 rounded-[1.35rem] border border-white/70 bg-white/75 px-2.5 py-1.5 shadow-[0_10px_26px_rgba(15,23,42,0.09)] backdrop-blur-xl">
+          <Button
+            type="button"
+            size="icon"
+            variant="secondary"
+            className="h-9 w-9 rounded-xl"
+            onClick={() => setMenuOpen(true)}
+          >
             <Menu className="h-4 w-4" />
           </Button>
           <div className="min-w-0 text-center">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700">
-              Mobile Workspace
+            <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-amber-700">
+              Jeeves Mobile
             </div>
-            <div className="mt-0.5 truncate text-sm font-semibold text-slate-950">
-              网站功能手机版
+            <div className="truncate text-[13px] font-semibold text-slate-950">
+              完整功能工作台
             </div>
           </div>
-          <div className="h-11 w-11" />
+          <div className="h-9 w-9" />
         </header>
 
         <section className="min-h-0 flex-1">

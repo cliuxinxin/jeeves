@@ -691,19 +691,21 @@ export function ChatPane({
 
   return (
     <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-slate-200 bg-white/92">
-      <CardHeader className="border-b border-slate-200/80 p-4 sm:p-6 sm:pb-4">
-        <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+      <CardHeader className="border-b border-slate-200/80 p-3 sm:p-6 sm:pb-4">
+        <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0 flex-1">
             <CardTitle className="truncate font-display text-lg font-semibold text-slate-950 sm:text-xl">
               {title}
             </CardTitle>
-            <div className="mt-1 flex flex-wrap items-center gap-2 sm:gap-3">
-              <span className="text-sm text-slate-500">{modelLabel}</span>
+            <div className="mt-2 grid gap-2 sm:mt-1 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+              <span className="min-w-0 truncate rounded-2xl bg-slate-950/5 px-3 py-2 text-xs text-slate-600 sm:bg-transparent sm:p-0 sm:text-sm sm:text-slate-500">
+                {modelLabel}
+              </span>
               <span className="hidden text-slate-300 sm:inline">|</span>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-500">工作流:</span>
+              <label className="flex min-w-0 items-center gap-2 rounded-2xl bg-white/75 px-3 py-2 sm:bg-transparent sm:p-0">
+                <span className="shrink-0 text-xs text-slate-500 sm:text-sm">工作流</span>
                 <select
-                  className="max-w-[150px] cursor-pointer truncate border-b border-dashed border-slate-300 bg-transparent pb-0.5 text-sm font-medium text-slate-700 focus:outline-none"
+                  className="min-w-0 flex-1 cursor-pointer truncate border-b border-dashed border-slate-300 bg-transparent pb-0.5 text-sm font-medium text-slate-700 focus:outline-none sm:max-w-[150px]"
                   value={activeGraphId ?? ""}
                   onChange={(event) => {
                     if (event.target.value) {
@@ -721,16 +723,16 @@ export function ChatPane({
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <div className="grid grid-cols-5 gap-2 sm:flex sm:shrink-0 sm:flex-wrap sm:items-center sm:justify-end">
             {authUsername ? (
               <Button
                 type="button"
                 variant="secondary"
-                className="h-10 px-3"
+                className="h-10 px-0 sm:px-3"
                 onClick={onLogout}
                 disabled={isAuthMutating}
                 title={`退出 ${authUsername}`}
@@ -739,19 +741,19 @@ export function ChatPane({
                 <span className="hidden sm:inline">退出 ({authUsername})</span>
               </Button>
             ) : null}
-            <Button type="button" variant="secondary" className="h-10 px-3" onClick={onNewConversation}>
+            <Button type="button" variant="secondary" className="h-10 px-0 sm:px-3" onClick={onNewConversation}>
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline">新对话</span>
             </Button>
-            <Button type="button" variant="secondary" className="h-10 px-3" onClick={onOpenLikedCards}>
+            <Button type="button" variant="secondary" className="h-10 px-0 sm:px-3" onClick={onOpenLikedCards}>
               <Heart className="h-4 w-4" />
               <span className="hidden sm:inline">好卡片</span>
             </Button>
-            <Button type="button" variant="secondary" className="h-10 px-3" onClick={onToggleTrace}>
+            <Button type="button" variant="secondary" className="h-10 px-0 sm:px-3" onClick={onToggleTrace}>
               {isTraceOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
               <span className="hidden sm:inline">轨迹</span>
             </Button>
-            <Button type="button" variant="secondary" size="icon" onClick={onOpenSettings}>
+            <Button type="button" variant="secondary" size="icon" className="h-10 w-full sm:w-11" onClick={onOpenSettings}>
               <Settings2 className="h-4 w-4" />
             </Button>
           </div>
@@ -765,7 +767,7 @@ export function ChatPane({
           </div>
         ) : null}
 
-        <ScrollArea className="min-h-0 flex-1 px-5 py-5 sm:px-6" viewportRef={viewportRef}>
+        <ScrollArea className="min-h-0 flex-1 px-3 py-4 sm:px-6 sm:py-5" viewportRef={viewportRef}>
           {isBootstrapping || isConversationLoading ? (
             <div className="flex h-full min-h-[18rem] items-center justify-center text-sm text-slate-500">
               <span className="inline-flex items-center gap-2">
@@ -1124,7 +1126,7 @@ export function ChatPane({
         </ScrollArea>
       </CardContent>
 
-      <CardFooter className="flex-col gap-3 border-t border-slate-200/80 pt-4">
+      <CardFooter className="flex-col gap-3 border-t border-slate-200/80 p-3 pt-3 sm:p-6 sm:pt-4">
         {error ? (
           <div className="w-full rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
@@ -1137,7 +1139,7 @@ export function ChatPane({
           </div>
         ) : null}
 
-        <div className="grid w-full gap-3 sm:grid-cols-[1fr_auto]">
+        <div className="grid w-full grid-cols-[1fr_auto] items-center gap-2 sm:gap-3">
           <Input
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
