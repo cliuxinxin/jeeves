@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:phone": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "generate:api": "node scripts/generate-api.mjs",

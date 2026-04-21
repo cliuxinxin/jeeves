@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, LockKeyhole } from "lucide-react";
 
 import AssistantWorkspace from "@/components/assistant-workspace";
+import { MobileAssistantApp } from "@/components/mobile-assistant-app";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,11 @@ import {
   type AuthSessionResponse,
 } from "@/lib/api/client";
 
-export function AuthShell() {
+type AuthShellProps = {
+  variant?: "auto" | "desktop" | "mobile";
+};
+
+export function AuthShell({ variant = "auto" }: AuthShellProps) {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<AuthSessionResponse | null>(null);
   const [username, setUsername] = useState("");
@@ -23,6 +28,9 @@ export function AuthShell() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthMutating, setIsAuthMutating] = useState(false);
+  const [autoVariant, setAutoVariant] = useState<"desktop" | "mobile">("desktop");
+
+  const effectiveVariant = variant === "auto" ? autoVariant : variant;
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +60,21 @@ export function AuthShell() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (variant !== "auto") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const updateVariant = () => setAutoVariant(mediaQuery.matches ? "mobile" : "desktop");
+    updateVariant();
+    mediaQuery.addEventListener("change", updateVariant);
+
+    return () => {
+      mediaQuery.removeEventListener("change", updateVariant);
+    };
+  }, [variant]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -88,7 +111,7 @@ export function AuthShell() {
 
   if (isLoading) {
     return (
-      <main className="flex h-screen items-center justify-center bg-slate-100">
+      <main className="flex h-[100dvh] items-center justify-center bg-slate-100">
         <div className="inline-flex items-center gap-2 text-sm text-slate-600">
           <LoaderCircle className="h-4 w-4 animate-spin" />
           正在检查登录状态...
@@ -98,8 +121,20 @@ export function AuthShell() {
   }
 
   if (session?.authenticated) {
+    if (effectiveVariant === "mobile") {
+      return (
+        <main className="h-[100dvh] overflow-hidden">
+          <MobileAssistantApp
+            authUsername={session.username}
+            onLogout={() => void handleLogout()}
+            isAuthMutating={isAuthMutating}
+          />
+        </main>
+      );
+    }
+
     return (
-      <main className="h-screen overflow-hidden">
+      <main className="h-[100dvh] overflow-hidden">
         <AssistantWorkspace
           authUsername={session.username}
           onLogout={() => void handleLogout()}
@@ -110,16 +145,20 @@ export function AuthShell() {
   }
 
   return (
-    <main className="flex h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_45%),linear-gradient(180deg,_#f8fafc_0%,_#e2e8f0_100%)] px-4">
+    <main className="flex h-[100dvh] items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_45%),linear-gradient(180deg,_#f8fafc_0%,_#e2e8f0_100%)] px-4">
       <Card className="w-full max-w-md border-slate-200 bg-white/95 shadow-xl">
         <CardHeader className="space-y-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white">
             <LockKeyhole className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle className="font-display text-2xl text-slate-950">登录 Jeeves</CardTitle>
+            <CardTitle className="font-display text-2xl text-slate-950">
+              登录 {effectiveVariant === "mobile" ? "Jeeves Mobile" : "Jeeves"}
+            </CardTitle>
             <CardDescription className="mt-2 text-sm leading-6 text-slate-500">
-              部署到公网后，先完成管理员登录，再进入工作台。
+              {effectiveVariant === "mobile"
+                ? "手机访问同样需要管理员登录，登录后会进入移动端聊天应用。"
+                : "部署到公网后，先完成管理员登录，再进入工作台。"}
             </CardDescription>
           </div>
         </CardHeader>

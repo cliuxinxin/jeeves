@@ -153,6 +153,7 @@ SQLite 当前维护 4 张核心表：
 参考 `frontend/.env.example`：
 
 - `NEXT_PUBLIC_API_URL`
+- `BACKEND_URL`
 
 ## 本地开发
 
@@ -173,6 +174,23 @@ cp .env.example .env.local
 npm install
 npm run dev
 ```
+
+### 手机访问
+
+手机和电脑连到同一个局域网后，可以启动移动端入口：
+
+```bash
+cd frontend
+npm run dev:phone
+```
+
+然后在手机浏览器访问 `http://电脑局域网 IP:3000/mobile`。例如电脑 IP 是 `192.168.1.23`，手机访问：
+
+```text
+http://192.168.1.23:3000/mobile
+```
+
+移动端入口支持添加到手机主屏幕。前端会优先使用同源 `/api` 访问后端，并由 Next.js 代理到 `BACKEND_URL`，因此手机不会把 API 请求打到手机自己的 `localhost`。本地默认 `BACKEND_URL=http://localhost:8000`，后端仍按原方式启动即可。
 
 ## 检查与测试
 
