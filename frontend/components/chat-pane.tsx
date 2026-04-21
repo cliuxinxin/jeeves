@@ -691,15 +691,17 @@ export function ChatPane({
 
   return (
     <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-slate-200 bg-white/92">
-      <CardHeader className="border-b border-slate-200/80 pb-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <CardTitle className="font-display text-xl font-semibold text-slate-950">{title}</CardTitle>
-            <div className="mt-1 flex items-center gap-3">
+      <CardHeader className="border-b border-slate-200/80 p-4 sm:p-6 sm:pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+          <div className="min-w-0 flex-1">
+            <CardTitle className="truncate font-display text-lg font-semibold text-slate-950 sm:text-xl">
+              {title}
+            </CardTitle>
+            <div className="mt-1 flex flex-wrap items-center gap-2 sm:gap-3">
               <span className="text-sm text-slate-500">{modelLabel}</span>
-              <span className="text-slate-300">|</span>
+              <span className="hidden text-slate-300 sm:inline">|</span>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-500">当前会话工作流:</span>
+                <span className="text-sm text-slate-500">工作流:</span>
                 <select
                   className="max-w-[150px] cursor-pointer truncate border-b border-dashed border-slate-300 bg-transparent pb-0.5 text-sm font-medium text-slate-700 focus:outline-none"
                   value={activeGraphId ?? ""}
@@ -723,24 +725,31 @@ export function ChatPane({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {authUsername ? (
-              <Button type="button" variant="secondary" className="h-10 px-3" onClick={onLogout} disabled={isAuthMutating}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-10 px-3"
+                onClick={onLogout}
+                disabled={isAuthMutating}
+                title={`退出 ${authUsername}`}
+              >
                 {isAuthMutating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
-                退出 ({authUsername})
+                <span className="hidden sm:inline">退出 ({authUsername})</span>
               </Button>
             ) : null}
             <Button type="button" variant="secondary" className="h-10 px-3" onClick={onNewConversation}>
               <Plus className="h-4 w-4" />
-              新对话
+              <span className="hidden sm:inline">新对话</span>
             </Button>
             <Button type="button" variant="secondary" className="h-10 px-3" onClick={onOpenLikedCards}>
               <Heart className="h-4 w-4" />
-              好卡片
+              <span className="hidden sm:inline">好卡片</span>
             </Button>
             <Button type="button" variant="secondary" className="h-10 px-3" onClick={onToggleTrace}>
               {isTraceOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-              轨迹
+              <span className="hidden sm:inline">轨迹</span>
             </Button>
             <Button type="button" variant="secondary" size="icon" onClick={onOpenSettings}>
               <Settings2 className="h-4 w-4" />
@@ -976,7 +985,7 @@ export function ChatPane({
                                         )}
                                       >
                                         <div className={cn("absolute inset-x-0 top-0 h-1.5", tone.bar)} />
-                                        <div className="mb-4 flex items-start justify-between gap-3">
+                                        <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
                                           <div className="space-y-2">
                                             <div className="flex flex-wrap items-center gap-2">
                                               {titleMeta.category ? (
@@ -985,11 +994,11 @@ export function ChatPane({
                                                 </div>
                                               ) : null}
                                             </div>
-                                            <div className="max-w-[72ch] text-[22px] leading-tight font-semibold tracking-tight text-slate-950">
+                                            <div className="max-w-[72ch] text-xl leading-tight font-semibold tracking-tight text-slate-950 sm:text-[22px]">
                                               {titleMeta.heading}
                                             </div>
                                           </div>
-                                          <div className="flex items-center gap-2">
+                                          <div className="flex flex-wrap items-center gap-2">
                                             <button
                                               type="button"
                                               onClick={() => {
