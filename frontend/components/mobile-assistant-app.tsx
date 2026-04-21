@@ -17,10 +17,7 @@ import remarkGfm from "remark-gfm";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useChatStream } from "@/hooks/use-chat-stream";
-import { useConversations } from "@/hooks/use-conversations";
-import { useGraphConfigs } from "@/hooks/use-graph-configs";
-import { useRuntimeStatus } from "@/hooks/use-runtime-status";
+import { useAssistantChatController } from "@/hooks/use-assistant-chat-controller";
 import { cn } from "@/lib/utils";
 import { formatNodeLabel } from "@/lib/node-ui";
 
@@ -110,10 +107,6 @@ const markdownComponents: Components = {
   ),
 };
 
-function describeError(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
-
 function normalizeMarkdown(content: string) {
   return content
     .replace(/\r\n/g, "\n")
@@ -139,39 +132,33 @@ export function MobileAssistantApp({
   isAuthMutating,
 }: MobileAssistantAppProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
-  const [input, setInput] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  const [conversationActionNotice, setConversationActionNotice] = useState<string | null>(null);
 
-  const runtimeStatusQuery = useRuntimeStatus();
-  const conversations = useConversations();
-  const graphConfigs = useGraphConfigs();
-  const chatStream = useChatStream();
+  const {
+    activeGraphId,
+    chatStream,
+    combinedChatError,
+    conversationActionNotice,
+    conversations,
+    graphConfigs,
+    handleActivateGraphFromChat,
+    handleCreateConversation,
+    handleSend,
+    input,
+    isBootstrapping,
+    isConfigured,
+    messages,
+    runtimeStatusQuery,
+    setInput,
+  } = useAssistantChatController();
 
   useEffect(() => {
-    chatStream.cancelStream();
-    chatStream.clearError();
-    setChatError(null);
-    setConversationActionNotice(null);
     setMenuOpen(false);
   }, [conversations.activeConversationId]);
 
-  const persistedMessages = useMemo<MobileMessage[]>(
-    () =>
-      conversations.activeConversationMessages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        node: "node" in message ? (message as MobileMessage).node : undefined,
-        node_label: "node_label" in message ? (message as MobileMessage).node_label : undefined,
-      })),
-    [conversations.activeConversationMessages],
-  );
-
   const displayMessages = useMemo<MobileMessage[]>(
-    () => [...persistedMessages, ...chatStream.streamingMessages],
-    [persistedMessages, chatStream.streamingMessages],
+    () => [...messages, ...chatStream.streamingMessages],
+    [messages, chatStream.streamingMessages],
   );
 
   useEffect(() => {
@@ -180,82 +167,10 @@ export function MobileAssistantApp({
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
   }, [displayMessages, chatStream.isSending]);
 
-  const activeGraphId =
-    conversations.activeConversationDetail?.conversation.graph_config_id ??
-    conversations.activeConversation?.graph_config_id ??
-    graphConfigs.activeConfigId ??
-    null;
-
-  const combinedChatError = chatStream.error ?? chatError;
-  const isBootstrapping = conversations.isBootstrapping || runtimeStatusQuery.isLoading;
-  const isReady = Boolean(runtimeStatusQuery.data?.configured);
   const activeTitle = conversations.activeConversation?.title ?? "新对话";
   const modelLabel = runtimeStatusQuery.data?.configured
     ? `${runtimeStatusQuery.data.config_name} · ${runtimeStatusQuery.data.model}`
     : "还没有可用模型配置";
-
-  async function handleSend() {
-    const trimmed = input.trim();
-    if (!trimmed || chatStream.isSending || !isReady) {
-      return;
-    }
-
-    setChatError(null);
-    setConversationActionNotice(null);
-    chatStream.clearError();
-
-    let conversationId = conversations.activeConversationId;
-    if (conversationId === null) {
-      try {
-        const createdConversation = await conversations.createNewConversation({
-          graph_config_id: activeGraphId ?? undefined,
-        });
-        conversationId = createdConversation.id;
-      } catch (error) {
-        setChatError(describeError(error, "创建对话失败。"));
-        return;
-      }
-    }
-
-    setInput("");
-    await chatStream.sendMessage({
-      conversation_id: conversationId,
-      message: trimmed,
-    });
-  }
-
-  async function handleCreateConversation() {
-    try {
-      setChatError(null);
-      setConversationActionNotice(null);
-      chatStream.clearError();
-      const createdConversation = await conversations.createNewConversation({
-        graph_config_id: activeGraphId ?? undefined,
-      });
-      conversations.setActiveConversationId(createdConversation.id);
-      setMenuOpen(false);
-    } catch (error) {
-      setChatError(describeError(error, "创建对话失败。"));
-    }
-  }
-
-  async function handleActivateGraphFromChat(configId: number) {
-    try {
-      setConversationActionNotice(null);
-      chatStream.clearError();
-      if (conversations.activeConversationId === null) {
-        const createdConversation = await conversations.createNewConversation({
-          graph_config_id: configId,
-        });
-        conversations.setActiveConversationId(createdConversation.id);
-      } else {
-        await conversations.updateConversationConfig(conversations.activeConversationId, configId);
-      }
-      setChatError(null);
-    } catch (error) {
-      setChatError(describeError(error, "切换工作流失败。"));
-    }
-  }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -288,7 +203,7 @@ export function MobileAssistantApp({
 
             <Button type="button" className="mb-4 w-full" onClick={() => void handleCreateConversation()}>
               <Plus className="h-4 w-4" />
-              新建手机对话
+              新建对话
             </Button>
 
             <ScrollArea className="min-h-0 flex-1">
@@ -474,7 +389,7 @@ export function MobileAssistantApp({
             </div>
           ) : null}
 
-          {!isReady ? (
+          {!isConfigured ? (
             <div className="mb-3 rounded-3xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-sm leading-6 text-amber-800">
               还没有可用模型配置。请先进入 <a className="font-semibold underline" href="/">桌面工作台</a> 完成设置。
             </div>
@@ -498,7 +413,7 @@ export function MobileAssistantApp({
             <Button
               type="submit"
               size="icon"
-              disabled={chatStream.isSending || !input.trim() || !isReady}
+              disabled={chatStream.isSending || !input.trim() || !isConfigured || isBootstrapping}
               className="shrink-0 rounded-2xl"
             >
               {chatStream.isSending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

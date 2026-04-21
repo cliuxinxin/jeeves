@@ -1139,9 +1139,20 @@ export function ChatPane({
               }
             }}
             placeholder="输入你的问题"
+            disabled={isBootstrapping || isConversationLoading}
           />
 
-          <Button size="icon" onClick={onSend} disabled={isSending || !input.trim() || !runtimeStatus?.configured}>
+          <Button
+            size="icon"
+            onClick={onSend}
+            disabled={
+              isSending ||
+              isBootstrapping ||
+              isConversationLoading ||
+              !input.trim() ||
+              !runtimeStatus?.configured
+            }
+          >
             {isSending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
