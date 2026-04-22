@@ -1139,7 +1139,18 @@ export function ChatPane({
           </div>
         ) : null}
 
-        <div className="grid w-full grid-cols-[1fr_auto] items-center gap-2 sm:gap-3">
+        <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-11 px-3 sm:px-4"
+            onClick={onNewConversation}
+            title="新建对话"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">新对话</span>
+          </Button>
+
           <Input
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
