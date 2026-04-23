@@ -1,9 +1,10 @@
 "use client";
 
-import { Heart, LoaderCircle, Trash } from "lucide-react";
+import { Download, Heart, LoaderCircle, Trash } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useLikedCards } from "@/hooks/use-liked-cards";
+import type { LikedCardRecord } from "@/lib/api/client";
 import { formatNodeLabel } from "@/lib/node-ui";
 
 type JsonRecord = Record<string, unknown>;
@@ -37,16 +38,192 @@ function getPromptPreviews(snapshot: unknown): JsonRecord[] {
   return asArray(graphConfig.prompt_previews).map(asRecord);
 }
 
+function safeFileTimestamp() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function downloadTextFile({
+  content,
+  filename,
+  type,
+}: {
+  content: string;
+  filename: string;
+  type: string;
+}) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildExportPayload(cards: LikedCardRecord[]) {
+  return {
+    exported_at: new Date().toISOString(),
+    total: cards.length,
+    items: cards.map((card) => ({
+      id: card.id,
+      title: card.title,
+      content: card.content,
+      route_label: card.route_label,
+      card_index: card.card_index,
+      created_at: card.created_at,
+      conversation: {
+        id: card.conversation_id,
+        title: card.conversation_title,
+      },
+      workflow: {
+        graph_config_id: card.graph_config_id,
+        graph_config_name: card.graph_config_name,
+        graph_type: card.graph_type,
+      },
+      source: {
+        message_id: card.source_message_id,
+        request_id: card.source_request_id,
+        node_name: card.source_node_name,
+        node_label: card.source_node_label,
+        state_patch: card.source_state_patch ?? {},
+      },
+      workflow_snapshot: card.workflow_snapshot ?? {},
+    })),
+  };
+}
+
+function formatCardAsMarkdown(card: LikedCardRecord, index: number) {
+  const generationLogs = getGenerationLogs(card.workflow_snapshot);
+  const promptPreviews = getPromptPreviews(card.workflow_snapshot);
+  const sourceStateEntries = Object.entries(card.source_state_patch ?? {});
+  const lines = [
+    `## ${index + 1}. ${card.title}`,
+    "",
+    `- 会话: ${card.conversation_title || `会话 ${card.conversation_id}`}`,
+    `- 卡片: ${card.card_index}`,
+    `- 路由: ${card.route_label || "未记录"}`,
+    `- 工作流: ${card.graph_config_name || card.graph_type || "未记录"}`,
+    `- 源节点: ${formatNodeLabel(card.source_node_name, card.source_node_label)}`,
+    `- Request: ${card.source_request_id || "未匹配到同次生成日志"}`,
+    `- 点赞时间: ${card.created_at}`,
+    "",
+    "### 卡片内容",
+    "",
+    card.content,
+    "",
+  ];
+
+  if (sourceStateEntries.length > 0) {
+    lines.push("### 节点状态补丁", "");
+    for (const [key, value] of sourceStateEntries) {
+      lines.push(`#### ${key}`, "", "```json", displayValue(value), "```", "");
+    }
+  }
+
+  if (generationLogs.length > 0) {
+    lines.push("### 同次生成的节点日志", "");
+    for (const [logIndex, log] of generationLogs.entries()) {
+      const nodeName = asString(log.node_name);
+      const nodeLabel = asString(log.node_label);
+      const inputMessages = asArray(log.input_messages).map(asRecord);
+      const responseText = asString(log.response_text);
+      lines.push(`#### ${logIndex + 1}. ${formatNodeLabel(nodeName, nodeLabel)}`, "");
+
+      if (inputMessages.length > 0) {
+        lines.push("输入消息 / Prompt:", "");
+        for (const message of inputMessages) {
+          lines.push(`**${asString(message.role) || "message"}**`, "", asString(message.content) || "", "");
+        }
+      }
+
+      if (responseText) {
+        lines.push("节点输出:", "", responseText, "");
+      }
+    }
+  }
+
+  if (promptPreviews.length > 0) {
+    lines.push("### 工作流提示词预览", "");
+    for (const preview of promptPreviews) {
+      lines.push(
+        `#### ${formatNodeLabel(asString(preview.node), asString(preview.node_label))}`,
+        "",
+        asString(preview.prompt_preview) || "",
+        "",
+      );
+    }
+  }
+
+  return lines.join("\n").trim();
+}
+
+function exportLikedCards(cards: LikedCardRecord[], format: "json" | "markdown") {
+  if (cards.length === 0) {
+    return;
+  }
+
+  const timestamp = safeFileTimestamp();
+  if (format === "json") {
+    downloadTextFile({
+      content: JSON.stringify(buildExportPayload(cards), null, 2),
+      filename: `liked-cards-${timestamp}.json`,
+      type: "application/json;charset=utf-8",
+    });
+    return;
+  }
+
+  downloadTextFile({
+    content: [
+      "# Jeeves 好卡片导出",
+      "",
+      `导出时间: ${new Date().toLocaleString()}`,
+      `卡片数量: ${cards.length}`,
+      "",
+      ...cards.map(formatCardAsMarkdown),
+    ].join("\n\n---\n\n"),
+    filename: `liked-cards-${timestamp}.md`,
+    type: "text/markdown;charset=utf-8",
+  });
+}
+
 export function LikedCardsPanel() {
   const likedCards = useLikedCards({ limit: 200 });
+  const canExport = !likedCards.likedCardsQuery.isLoading && likedCards.likedCards.length > 0;
 
   return (
     <div className="space-y-5">
-      <div>
-        <div className="font-display text-2xl font-semibold text-slate-950">好卡片</div>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          这里会收集你点过赞的洞察卡片，并保留当时的生成流程，方便后续复盘哪些标题、路由、提示词和节点输出更值得保留。
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="font-display text-2xl font-semibold text-slate-950">好卡片</div>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            这里会收集你点过赞的洞察卡片，并保留当时的生成流程，方便后续复盘哪些标题、路由、提示词和节点输出更值得保留。
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => exportLikedCards(likedCards.likedCards, "markdown")}
+            disabled={!canExport}
+            title="导出为 Markdown"
+          >
+            <Download className="h-4 w-4" />
+            导出 MD
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => exportLikedCards(likedCards.likedCards, "json")}
+            disabled={!canExport}
+            title="导出为 JSON"
+          >
+            <Download className="h-4 w-4" />
+            导出 JSON
+          </Button>
+        </div>
       </div>
 
       {likedCards.likedCardsQuery.isLoading ? (
