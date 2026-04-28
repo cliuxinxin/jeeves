@@ -83,6 +83,16 @@ export function MobileAssistantApp({
     }
   }
 
+  async function handleActivateModelFromChat(configId: number) {
+    try {
+      setChatError(null);
+      chatStream.clearError();
+      await llmConfigs.activateConfig(configId);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "切换模型失败。");
+    }
+  }
+
   return (
     <div className="relative h-[100dvh] min-h-[100dvh] overflow-hidden bg-[#f4efe4] text-slate-950">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(245,158,11,0.22),transparent_30%),radial-gradient(circle_at_85%_0%,rgba(14,165,233,0.18),transparent_28%),linear-gradient(180deg,#fff7ed_0%,#eef5f1_46%,#e7edf7_100%)]" />
@@ -216,6 +226,10 @@ export function MobileAssistantApp({
             title={conversations.activeConversation?.title ?? "New chat"}
             activeConversationId={conversations.activeConversationId}
             runtimeStatus={runtimeStatusQuery.data ?? null}
+            modelConfigs={llmConfigs.configs}
+            activeModelConfigId={llmConfigs.activeConfigId}
+            isModelLoading={llmConfigs.configsQuery.isLoading || runtimeStatusQuery.isLoading}
+            modelActivatingId={llmConfigs.activatingId}
             graphConfigs={graphConfigs.configs}
             activeGraphId={activeGraphId}
             messages={messages}
@@ -233,6 +247,7 @@ export function MobileAssistantApp({
             onNewConversation={() => void handleCreateConversation()}
             onLikeInsightCard={handleLikeInsightCard}
             onUnlikeLikedCard={handleUnlikeLikedCard}
+            onActivateModelConfig={handleActivateModelFromChat}
             onOpenSettings={() => openSettings("model")}
             onOpenLikedCards={() => openSettings("likes")}
             onToggleTrace={() => setTraceOpen((current) => !current)}

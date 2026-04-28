@@ -79,7 +79,7 @@ export function useLLMConfigs() {
     testConfig: testMutation.mutateAsync,
     isSaving: createMutation.isPending || updateMutation.isPending,
     isTesting: testMutation.isPending,
-    activatingId: activateMutation.variables ?? null,
+    activatingId: activateMutation.isPending ? (activateMutation.variables ?? null) : null,
     deletingId: deleteMutation.variables ?? null,
   };
 }

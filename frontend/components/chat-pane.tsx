@@ -27,6 +27,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type {
   GraphConfigRecord,
   HealthResponse,
+  LLMConfigRecord,
   LikedCardCreateRequest,
   LikedCardRecord,
 } from "@/lib/api/client";
@@ -49,6 +50,10 @@ type ChatPaneProps = {
   title: string;
   activeConversationId: number | null;
   runtimeStatus: HealthResponse | null;
+  modelConfigs: LLMConfigRecord[];
+  activeModelConfigId: number | null;
+  isModelLoading: boolean;
+  modelActivatingId: number | null;
   graphConfigs: GraphConfigRecord[];
   activeGraphId: number | null;
   messages: ChatPaneMessage[];
@@ -66,6 +71,7 @@ type ChatPaneProps = {
   onNewConversation: () => void;
   onLikeInsightCard: (payload: LikedCardCreateRequest) => Promise<void>;
   onUnlikeLikedCard: (likedCardId: number) => Promise<void>;
+  onActivateModelConfig: (configId: number) => Promise<void> | void;
   onOpenSettings: () => void;
   onOpenLikedCards: () => void;
   onToggleTrace: () => void;
@@ -170,6 +176,16 @@ function stripMarkdownInline(text: string) {
     .replace(/[*_`~]/g, "")
     .replace(/^#+\s*/gm, "")
     .trim();
+}
+
+function formatRuntimeModelLabel(runtimeStatus: HealthResponse | null) {
+  if (!runtimeStatus?.configured) {
+    return "尚未启用模型配置";
+  }
+
+  const configName = runtimeStatus.config_name?.trim() || "当前模型";
+  const modelName = runtimeStatus.model?.trim() || "未命名模型";
+  return `${configName} · ${modelName}`;
 }
 
 function summarizeText(text: string, maxLength = 160) {
@@ -584,6 +600,10 @@ export function ChatPane({
   title,
   activeConversationId,
   runtimeStatus,
+  modelConfigs,
+  activeModelConfigId,
+  isModelLoading,
+  modelActivatingId,
   graphConfigs,
   activeGraphId,
   messages,
@@ -601,6 +621,7 @@ export function ChatPane({
   onNewConversation,
   onLikeInsightCard,
   onUnlikeLikedCard,
+  onActivateModelConfig,
   onOpenSettings,
   onOpenLikedCards,
   onToggleTrace,
@@ -685,9 +706,18 @@ export function ChatPane({
     }
   }
 
-  const modelLabel = runtimeStatus?.configured
-    ? `${runtimeStatus.config_name} · ${runtimeStatus.model}`
-    : "尚未启用模型配置";
+  const modelLabel = formatRuntimeModelLabel(runtimeStatus);
+  const modelSelectValue =
+    modelActivatingId !== null
+      ? String(modelActivatingId)
+      : activeModelConfigId !== null
+        ? String(activeModelConfigId)
+        : runtimeStatus?.configured
+          ? "__runtime__"
+          : "";
+  const showRuntimeModelOption = runtimeStatus?.configured && activeModelConfigId === null;
+  const showModelPlaceholderOption = !runtimeStatus?.configured;
+  const isModelSelectDisabled = isModelLoading || isSending || modelConfigs.length === 0;
 
   return (
     <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-slate-200 bg-white/92">
@@ -698,9 +728,39 @@ export function ChatPane({
               {title}
             </CardTitle>
             <div className="mt-2 grid gap-2 sm:mt-1 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
-              <span className="min-w-0 truncate rounded-2xl bg-slate-950/5 px-3 py-2 text-xs text-slate-600 sm:bg-transparent sm:p-0 sm:text-sm sm:text-slate-500">
-                {modelLabel}
-              </span>
+              <label className="flex min-w-0 items-center gap-2 rounded-2xl bg-slate-950/5 px-3 py-2 sm:bg-transparent sm:p-0">
+                <span className="shrink-0 text-xs text-slate-500 sm:text-sm">模型</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <select
+                    className="min-w-0 flex-1 cursor-pointer truncate border-b border-dashed border-slate-300 bg-transparent pb-0.5 text-xs font-medium text-slate-700 focus:outline-none disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 sm:max-w-[220px] sm:text-sm"
+                    value={modelSelectValue}
+                    onChange={(event) => {
+                      if (event.target.value && event.target.value !== "__runtime__") {
+                        void onActivateModelConfig(Number(event.target.value));
+                      }
+                    }}
+                    disabled={isModelSelectDisabled}
+                    title={modelLabel}
+                  >
+                    {showRuntimeModelOption ? (
+                      <option value="__runtime__">{modelLabel}</option>
+                    ) : null}
+                    {showModelPlaceholderOption ? (
+                      <option value="">
+                        {modelConfigs.length === 0 ? "-- 暂无模型配置 --" : "-- 选择模型 --"}
+                      </option>
+                    ) : null}
+                    {modelConfigs.map((config) => (
+                      <option key={config.id} value={config.id}>
+                        {config.name} · {config.model}
+                      </option>
+                    ))}
+                  </select>
+                  {isModelLoading || modelActivatingId !== null ? (
+                    <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin text-slate-400" />
+                  ) : null}
+                </div>
+              </label>
               <span className="hidden text-slate-300 sm:inline">|</span>
               <label className="flex min-w-0 items-center gap-2 rounded-2xl bg-white/75 px-3 py-2 sm:bg-transparent sm:p-0">
                 <span className="shrink-0 text-xs text-slate-500 sm:text-sm">工作流</span>

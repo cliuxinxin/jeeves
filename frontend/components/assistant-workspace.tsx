@@ -71,6 +71,16 @@ export default function AssistantWorkspace({
     }
   }
 
+  async function handleActivateModelFromChat(configId: number) {
+    try {
+      setChatError(null);
+      chatStream.clearError();
+      await llmConfigs.activateConfig(configId);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "切换模型失败。");
+    }
+  }
+
   function openSettings(section: SettingsSection = "model") {
     setSettingsSection(section);
     setSettingsOpen(true);
@@ -93,6 +103,10 @@ export default function AssistantWorkspace({
               title={conversations.activeConversation?.title ?? "New chat"}
               activeConversationId={conversations.activeConversationId}
               runtimeStatus={runtimeStatusQuery.data ?? null}
+              modelConfigs={llmConfigs.configs}
+              activeModelConfigId={llmConfigs.activeConfigId}
+              isModelLoading={llmConfigs.configsQuery.isLoading || runtimeStatusQuery.isLoading}
+              modelActivatingId={llmConfigs.activatingId}
               graphConfigs={graphConfigs.configs}
               activeGraphId={activeGraphId}
               messages={messages}
@@ -110,6 +124,7 @@ export default function AssistantWorkspace({
               onNewConversation={() => void handleCreateConversation()}
               onLikeInsightCard={handleLikeInsightCard}
               onUnlikeLikedCard={handleUnlikeLikedCard}
+              onActivateModelConfig={handleActivateModelFromChat}
               onOpenSettings={() => openSettings("model")}
               onOpenLikedCards={() => openSettings("likes")}
               onToggleTrace={() => setTraceOpen((current) => !current)}
