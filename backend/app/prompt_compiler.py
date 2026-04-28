@@ -75,7 +75,7 @@ def _build_viral_writer_brief(viral_axis: str, strategy_text: str) -> str:
 
 def _format_value_routes(value_routes: list[str]) -> str:
     if not value_routes:
-        return "signal,framework"
+        return "framework,contrarian"
     return ",".join(value_routes)
 
 
@@ -89,23 +89,22 @@ def _describe_value_routes(value_routes: list[str]) -> str:
 
 
 def build_article_value_brief(value_routes: list[str], route_reason: str) -> str:
-    routes = value_routes or ["signal", "framework"]
-    reason = route_reason or "请围绕最值得拿走的价值，优先输出最值得复用或继续追踪的信息。"
+    routes = value_routes or ["framework", "contrarian"]
+    reason = route_reason or "请围绕最值得拿走的价值，优先输出最能被复用、转述或直接拿去行动的判断。"
     return (
         "价值路由信息：\n"
         f"- 已选路由：{_format_value_routes(routes)}\n"
         f"- 路由理由：{reason}\n\n"
         "各路由关注重点：\n"
         f"{_describe_value_routes(routes)}\n\n"
-        "卡片生成要求：\n"
-        "1. 只围绕最有价值的角度输出 2 到 4 张卡片，不要机械覆盖所有路由。\n"
-        "2. 每张卡片都要给出具体判断，并尽量贴近原文事实或例子。\n"
-        "3. 不要写成标准总结报告，而要写成“这篇文章最值得拿走什么”。\n"
-        "4. 如果某条路由价值不足，可以合并到更强的卡片里。\n"
+        "写作提醒：\n"
+        "1. 只围绕最强的 2 到 4 个洞察写卡片，不要机械覆盖所有路由。\n"
+        "2. 优先顺序是 framework > contrarian > opportunity；signal、risk、expression 只在文章主轴明显匹配时使用。\n"
+        "3. 每张卡片都要给出具体判断，并尽量贴近原文事实、案例、数字、工具或流程。\n"
+        "4. 每张卡片必须明确绑定到 1 个已选路由；如果某条路由价值不足，宁可不用。\n"
         "5. 正文中每张卡片必须使用 `### 卡片 1：市场信号：短标题` 这种 Markdown 小标题，数字统一用阿拉伯数字。\n"
-        "6. 每张卡片必须明确绑定到 1 个已选路由，标题里的第一个冒号后必须先写路由中文名，再写短标题。\n"
-        "7. 标题尽量控制在 8-16 个字，直接写判断，不要写成需要读完正文才能理解的抽象比喻。\n"
-        "8. 卡片顺序尽量按路由分组，相邻卡片不要频繁切换视角。"
+        "6. 标题尽量控制在 12 到 22 个字，直接写判断，必要时可以稍长，但不要写成需要读完正文才能理解的抽象比喻。\n"
+        "7. 卡片顺序尽量按路由分组，相邻卡片不要频繁切换视角。"
     )
 
 

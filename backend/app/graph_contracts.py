@@ -262,8 +262,8 @@ GRAPH_CONTRACTS: dict[GraphType, GraphContract] = {
         node_contracts=(
             NodeContract(
                 node="value_router",
-                label="阶段 1 · 价值路由",
-                purpose="判断这篇文章最值得拿走的价值角度，决定后续卡片生成重点。",
+                label="阶段 1 · 价值抓手",
+                purpose="筛出这篇文章最值得拿走的价值抓手，决定后续卡片生成重点。",
                 reads=("messages",),
                 writes=("value_routes", "route_reason"),
                 prompt_kind=PromptTemplateKind.ARTICLE_VALUE_ROUTER,
@@ -271,8 +271,8 @@ GRAPH_CONTRACTS: dict[GraphType, GraphContract] = {
             ),
             NodeContract(
                 node="card_writer",
-                label="阶段 2 · 洞察卡片",
-                purpose="基于价值路由生成动态洞察卡片，而不是固定格式总结。",
+                label="阶段 2 · 收藏卡片",
+                purpose="基于价值抓手生成收藏级洞察卡片，而不是摘要式总结。",
                 reads=("messages", "value_routes", "route_reason"),
                 writes=("final_output",),
                 prompt_kind=PromptTemplateKind.ARTICLE_VALUE_CARDS,
@@ -308,15 +308,15 @@ GRAPH_CONTRACTS: dict[GraphType, GraphContract] = {
         prompt_field_definitions=(
             PromptFieldDefinition(
                 key=PromptConfigField.ANALYZER.value,
-                label="阶段 1 提示词（value router）",
-                description="用于判断文章最值得拿走的价值路由。",
-                placeholder="例如：请从 signal/framework/opportunity 等角度中挑选最值得关注的 2-3 个。",
+                label="阶段 1 提示词（价值抓手筛选器）",
+                description="用于筛出文章最值得拿走的价值抓手。",
+                placeholder="例如：优先判断 framework / contrarian / opportunity，只有主轴明显匹配时再考虑 signal / risk / expression。",
             ),
             PromptFieldDefinition(
                 key=PromptConfigField.DECONSTRUCTOR.value,
-                label="阶段 2 提示词（card writer）",
-                description="用于按价值路由生成动态洞察卡片。",
-                placeholder="例如：不要机械总结全文，输出 2-4 张真正值得拿走的洞察卡片。",
+                label="阶段 2 提示词（收藏级卡片编辑）",
+                description="用于按价值抓手生成收藏级洞察卡片。",
+                placeholder="例如：不要机械总结全文，输出 2-4 张标题像判断、正文可复用的洞察卡片。",
             ),
         ),
     ),

@@ -39,11 +39,11 @@ ROUTE_ALIASES = {
 }
 
 FALLBACK_ROUTE_ORDER = [
-    "signal",
     "framework",
-    "opportunity",
-    "risk",
     "contrarian",
+    "opportunity",
+    "signal",
+    "risk",
     "expression",
 ]
 
@@ -84,10 +84,11 @@ def _fallback_value_routes(text: str) -> list[str]:
         if route not in detected:
             detected.append(route)
 
-    if any(keyword in content for keyword in ("教程", "步骤", "方法", "经验", "框架", "怎么做")):
+    if any(
+        keyword in content
+        for keyword in ("教程", "步骤", "方法", "经验", "框架", "流程", "架构", "清单", "原则", "怎么做")
+    ):
         add("framework")
-    if any(keyword in content for keyword in ("风险", "隐患", "警惕", "陷阱", "误判", "不确定")):
-        add("risk")
     if any(keyword in content for keyword in ("但是", "却", "反而", "并非", "误解", "常识")):
         add("contrarian")
     if any(keyword in content for keyword in ("机会", "创业", "产品", "商业", "变现", "增长")):
@@ -96,6 +97,8 @@ def _fallback_value_routes(text: str) -> list[str]:
         keyword in content for keyword in ("趋势", "信号", "变化", "数据", "市场", "发布", "增速")
     ):
         add("signal")
+    if any(keyword in content for keyword in ("风险", "隐患", "警惕", "陷阱", "误判", "不确定")):
+        add("risk")
     if any(keyword in content for keyword in ("标题", "开头", "表达", "写法", "叙事", "文风")):
         add("expression")
 
@@ -160,7 +163,7 @@ def create_card_writer_node(base_system_prompt: str):
     async def card_writer(state: dict[str, Any]) -> dict[str, Any]:
         llm = get_llm()
         messages = state["messages"]
-        value_routes = state.get("value_routes") or ["signal", "framework"]
+        value_routes = state.get("value_routes") or ["framework", "contrarian"]
         route_reason = str(state.get("route_reason", "") or "")
 
         system_prompt = compile_article_value_cards_prompt(
