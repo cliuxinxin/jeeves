@@ -7,7 +7,12 @@ from collections.abc import AsyncIterator
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage
 
-from app.prompt_defaults import DEFAULT_ANALYZER_PROMPT, DEFAULT_ARTICLE_VALUE_ROUTER_PROMPT
+from app.prompt_defaults import (
+    DEFAULT_ANALYZER_PROMPT,
+    DEFAULT_ARTICLE_VALUE_ROUTER_PROMPT,
+    DEFAULT_PARENT_VERIFICATION_PROMPT,
+    DEFAULT_SINGLE_QUESTION_DIAGNOSER_PROMPT,
+)
 from app.schemas import GraphConfigRecord, GraphType
 
 
@@ -372,6 +377,44 @@ def test_article_value_preview_returns_dynamic_card_flow(client) -> None:
     assert "每张卡片必须明确绑定到 1 个已选路由" in payload["items"][1]["prompt_preview"]
 
 
+def test_single_question_diagnosis_preview_includes_target_student_context(client) -> None:
+    response = client.post(
+        "/api/graph-configs/preview",
+        json={
+            "graph_type": "single_question_diagnosis",
+            "prompt_values": {
+                "target_student_profile": "昵称/称呼：小明\n年龄 / 年级：8 岁，二年级\n平时常见卡点：会说不会写",
+                "analyzer_prompt": "请先做单题错因排查。",
+                "deconstructor_prompt": "请生成家长验证提问。",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["node"] for item in payload["items"]] == [
+        "mistake_analyzer",
+        "parent_verifier",
+    ]
+    assert [slot["name"] for slot in payload["state_slots"]] == [
+        "messages",
+        "diagnosis_tags",
+        "diagnosis_summary",
+        "final_output",
+    ]
+    assert [field["key"] for field in payload["prompt_fields"]] == [
+        "target_student_profile",
+        "analyzer_prompt",
+        "deconstructor_prompt",
+    ]
+    assert payload["items"][0]["prompt_source"] == "analyzer_prompt"
+    assert payload["items"][1]["prompt_source"] == "deconstructor_prompt"
+    assert "针对对象背景" in payload["items"][0]["prompt_preview"]
+    assert "小明" in payload["items"][0]["prompt_preview"]
+    assert "阶段 1 初步排查摘要" in payload["items"][1]["prompt_preview"]
+    assert "家长验证提问" in payload["items"][1]["prompt_preview"]
+
+
 def test_summary_analysis_preview_preserves_legacy_system_prompt_fallback(client) -> None:
     created = client.post(
         "/api/graph-configs",
@@ -426,6 +469,28 @@ def test_article_value_uses_registered_prompt_defaults() -> None:
     assert graph_type == GraphType.ARTICLE_VALUE
     assert prompt_values["analyzer_prompt"] == DEFAULT_ARTICLE_VALUE_ROUTER_PROMPT
     assert "洞察卡片" in prompt_values["deconstructor_prompt"]
+
+
+def test_single_question_diagnosis_uses_registered_prompt_defaults() -> None:
+    from app.graphs.registry import resolve_graph_settings
+
+    graph_type, prompt_values = resolve_graph_settings(
+        GraphConfigRecord(
+            id=1,
+            name="Single Question Workflow",
+            graph_type=GraphType.SINGLE_QUESTION_DIAGNOSIS,
+            system_prompt="",
+            analyzer_prompt="",
+            deconstructor_prompt="",
+            is_active=True,
+            created_at="2026-04-11T00:00:00",
+            updated_at="2026-04-11T00:00:00",
+        )
+    )
+
+    assert graph_type == GraphType.SINGLE_QUESTION_DIAGNOSIS
+    assert prompt_values["analyzer_prompt"] == DEFAULT_SINGLE_QUESTION_DIAGNOSER_PROMPT
+    assert prompt_values["deconstructor_prompt"] == DEFAULT_PARENT_VERIFICATION_PROMPT
 
 
 def test_resolve_graph_settings_uses_registered_prompt_defaults() -> None:

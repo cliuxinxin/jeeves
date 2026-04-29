@@ -9,6 +9,7 @@ class GraphType(str, Enum):
     SUMMARY_ANALYSIS = "summary_analysis"
     VIRAL_TWEET = "viral_tweet"
     ARTICLE_VALUE = "article_value"
+    SINGLE_QUESTION_DIAGNOSIS = "single_question_diagnosis"
 
 
 class AILogStatus(str, Enum):

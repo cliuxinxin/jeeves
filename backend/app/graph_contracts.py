@@ -8,10 +8,14 @@ from .prompt_defaults import (
     DEFAULT_ARTICLE_VALUE_CARDS_PROMPT,
     DEFAULT_ARTICLE_VALUE_ROUTER_PROMPT,
     DEFAULT_ASSISTANT_SYSTEM_PROMPT,
+    DEFAULT_PARENT_VERIFICATION_PROMPT,
+    DEFAULT_SINGLE_QUESTION_DIAGNOSER_PROMPT,
     DEFAULT_VIRAL_TWEET_STRATEGIST_PROMPT,
     DEFAULT_VIRAL_TWEET_WRITER_PROMPT,
 )
 from .schemas import GraphType
+
+TARGET_STUDENT_PROFILE_KEY = "target_student_profile"
 
 
 class PromptTemplateKind(str, Enum):
@@ -22,6 +26,8 @@ class PromptTemplateKind(str, Enum):
     VIRAL_WRITER = "viral_writer"
     ARTICLE_VALUE_ROUTER = "article_value_router"
     ARTICLE_VALUE_CARDS = "article_value_cards"
+    SINGLE_QUESTION_DIAGNOSER = "single_question_diagnoser"
+    PARENT_VERIFIER = "parent_verifier"
 
 
 class PromptConfigField(str, Enum):
@@ -320,6 +326,83 @@ GRAPH_CONTRACTS: dict[GraphType, GraphContract] = {
             ),
         ),
     ),
+    GraphType.SINGLE_QUESTION_DIAGNOSIS: GraphContract(
+        graph_type=GraphType.SINGLE_QUESTION_DIAGNOSIS,
+        label="单题错因排查",
+        node_contracts=(
+            NodeContract(
+                node="mistake_analyzer",
+                label="阶段 1 · 单题错因分析",
+                purpose="围绕这一次具体错题，输出 2 到 3 个可验证的错因假设。",
+                reads=("messages",),
+                writes=("diagnosis_tags", "diagnosis_summary"),
+                prompt_kind=PromptTemplateKind.SINGLE_QUESTION_DIAGNOSER,
+                prompt_config_key=PromptConfigField.ANALYZER.value,
+            ),
+            NodeContract(
+                node="parent_verifier",
+                label="阶段 2 · 家长验证提问",
+                purpose="根据初步错因分析，生成家长可直接口头提问的排查问题。",
+                reads=("messages", "diagnosis_tags", "diagnosis_summary"),
+                writes=("final_output",),
+                prompt_kind=PromptTemplateKind.PARENT_VERIFIER,
+                prompt_config_key=PromptConfigField.DECONSTRUCTOR.value,
+            ),
+        ),
+        state_slot_definitions=(
+            StateSlotDefinition(
+                name="messages",
+                label="messages",
+                description="本次具体错题的题目、孩子答案、标准答案，以及家长补充的观察信息。",
+                kind=StateSlotKind.INPUT,
+            ),
+            StateSlotDefinition(
+                name="diagnosis_tags",
+                label="diagnosis_tags",
+                description="阶段 1 提炼出的错因排查标签，帮助阶段 2 生成更有针对性的验证问法。",
+                kind=StateSlotKind.INTERMEDIATE,
+            ),
+            StateSlotDefinition(
+                name="diagnosis_summary",
+                label="diagnosis_summary",
+                description="阶段 1 的简短分析摘要，概括这道题目前最值得优先排查的方向。",
+                kind=StateSlotKind.INTERMEDIATE,
+            ),
+            StateSlotDefinition(
+                name="final_output",
+                label="final_output",
+                description="阶段 2 生成的家长验证提问与观察指引。",
+                kind=StateSlotKind.OUTPUT,
+            ),
+        ),
+        prompt_field_definitions=(
+            PromptFieldDefinition(
+                key=TARGET_STUDENT_PROFILE_KEY,
+                label="针对对象",
+                description="填写这位孩子的长期背景，系统会在分析具体错题时参考。",
+                placeholder=(
+                    "例如：\n"
+                    "昵称/称呼：小明\n"
+                    "年龄 / 年级：8 岁，二年级\n"
+                    "学科和当前学习阶段：数学，正在学 20 以内退位减法\n"
+                    "平时常见卡点：看懂题慢，口头会说但落到纸面容易乱\n"
+                    "表达特点：需要一步一步问"
+                ),
+            ),
+            PromptFieldDefinition(
+                key=PromptConfigField.ANALYZER.value,
+                label="阶段 1 提示词（单题错因分析）",
+                description="用于围绕具体错题生成可验证的错因假设。",
+                placeholder="例如：请只围绕这道题本身分析 2 到 3 个最可能的错因，不要泛泛归因为粗心。",
+            ),
+            PromptFieldDefinition(
+                key=PromptConfigField.DECONSTRUCTOR.value,
+                label="阶段 2 提示词（家长验证提问）",
+                description="用于把初步错因分析转成家长可直接提问的验证问题。",
+                placeholder="例如：请生成家长能直接口头提问的短问题，每题说明它在验证什么。",
+            ),
+        ),
+    ),
 }
 
 AUXILIARY_NODE_LABELS: dict[str, str] = {
@@ -348,6 +431,11 @@ GRAPH_PROMPT_DEFAULTS: dict[GraphType, GraphPromptDefaults] = {
         default_system_prompt=DEFAULT_ASSISTANT_SYSTEM_PROMPT,
         default_analyzer_prompt=DEFAULT_ARTICLE_VALUE_ROUTER_PROMPT,
         default_deconstructor_prompt=DEFAULT_ARTICLE_VALUE_CARDS_PROMPT,
+    ),
+    GraphType.SINGLE_QUESTION_DIAGNOSIS: GraphPromptDefaults(
+        default_system_prompt=DEFAULT_ASSISTANT_SYSTEM_PROMPT,
+        default_analyzer_prompt=DEFAULT_SINGLE_QUESTION_DIAGNOSER_PROMPT,
+        default_deconstructor_prompt=DEFAULT_PARENT_VERIFICATION_PROMPT,
     ),
 }
 

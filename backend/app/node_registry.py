@@ -6,10 +6,14 @@ from .graph_contracts import NodeContract
 from .graph_prompt_values import get_prompt_value
 from .nodes.article_value_nodes import create_card_writer_node, create_value_router_node
 from .nodes.assistant import create_assistant_node
+from .nodes.single_question_diagnosis_nodes import (
+    create_mistake_analyzer_node,
+    create_parent_verifier_node,
+)
 from .nodes.summary_analysis_nodes import create_analyzer_node, create_deconstructor_node
 from .nodes.viral_tweet_nodes import create_tweet_strategist_node, create_tweet_writer_node
 
-NodeFactory = Callable[[str], object]
+NodeFactory = Callable[..., object]
 
 
 NODE_FACTORIES: dict[str, NodeFactory] = {
@@ -20,6 +24,8 @@ NODE_FACTORIES: dict[str, NodeFactory] = {
     "writer": create_tweet_writer_node,
     "value_router": create_value_router_node,
     "card_writer": create_card_writer_node,
+    "mistake_analyzer": create_mistake_analyzer_node,
+    "parent_verifier": create_parent_verifier_node,
 }
 
 
@@ -43,4 +49,6 @@ def build_registered_node(
         contract,
         prompt_values=prompt_values,
     )
+    if contract.node in {"mistake_analyzer", "parent_verifier"}:
+        return factory(prompt_value, dict(prompt_values))
     return factory(prompt_value)

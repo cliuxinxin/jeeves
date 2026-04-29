@@ -15,5 +15,7 @@ export function stageAccentClass(node?: string | null) {
   if (node === "writer") return "border-l-rose-400 bg-rose-50/60";
   if (node === "value_router") return "border-l-indigo-400 bg-indigo-50/60";
   if (node === "card_writer") return "border-l-teal-400 bg-teal-50/60";
+  if (node === "mistake_analyzer") return "border-l-cyan-400 bg-cyan-50/60";
+  if (node === "parent_verifier") return "border-l-lime-400 bg-lime-50/60";
   return "border-l-slate-300 bg-white";
 }

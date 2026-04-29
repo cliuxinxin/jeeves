@@ -19,6 +19,8 @@ class PipelineState(TypedDict):
     strategy_text: NotRequired[str]
     value_routes: NotRequired[list[str]]
     route_reason: NotRequired[str]
+    diagnosis_tags: NotRequired[list[str]]
+    diagnosis_summary: NotRequired[str]
     final_output: NotRequired[str]
 
 

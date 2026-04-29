@@ -715,7 +715,7 @@ export interface components {
          * GraphType
          * @enum {string}
          */
-        GraphType: "simple_chat" | "summary_analysis" | "viral_tweet" | "article_value";
+        GraphType: "simple_chat" | "summary_analysis" | "viral_tweet" | "article_value" | "single_question_diagnosis";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */

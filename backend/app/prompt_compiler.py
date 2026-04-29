@@ -6,6 +6,7 @@ from typing import Mapping, TypedDict
 from .graph_contracts import (
     NodeContract,
     PromptTemplateKind,
+    TARGET_STUDENT_PROFILE_KEY,
     get_graph_node_contracts,
 )
 from .graph_prompt_values import get_prompt_value
@@ -16,6 +17,8 @@ from .prompt_defaults import (
     DEFAULT_ARTICLE_VALUE_CARDS_PROMPT,
     DEFAULT_ARTICLE_VALUE_ROUTER_PROMPT,
     DEFAULT_ASSISTANT_SYSTEM_PROMPT,
+    DEFAULT_PARENT_VERIFICATION_PROMPT,
+    DEFAULT_SINGLE_QUESTION_DIAGNOSER_PROMPT,
     DEFAULT_VIRAL_TWEET_STRATEGIST_PROMPT,
     DEFAULT_VIRAL_TWEET_WRITER_PROMPT,
     TYPE_FOCUS_MAP,
@@ -108,6 +111,46 @@ def build_article_value_brief(value_routes: list[str], route_reason: str) -> str
     )
 
 
+def _build_target_student_profile_section(target_student_profile: str) -> str:
+    profile = (target_student_profile or "").strip()
+    if not profile:
+        return (
+            "针对对象背景：\n"
+            "- 当前未额外填写长期背景，请只依据这次具体错题与家长描述做排查。\n"
+            "- 不要擅自推断孩子的长期能力水平。"
+        )
+
+    return (
+        "针对对象背景：\n"
+        f"{profile}\n\n"
+        "使用提醒：\n"
+        "1. 这些背景只作为理解孩子表达和常见卡点的参考。\n"
+        "2. 本次判断仍然必须优先围绕这道具体题本身展开。\n"
+        "3. 不要因为历史卡点就忽略题目当下的信息。"
+    )
+
+
+def build_single_question_diagnosis_brief(
+    diagnosis_tags: list[str],
+    diagnosis_summary: str,
+) -> str:
+    tags = diagnosis_tags or ["题意理解偏差", "概念理解断点"]
+    summary = (
+        diagnosis_summary.strip()
+        if diagnosis_summary.strip()
+        else "目前还没有明确结论，请围绕这道题继续排查孩子究竟卡在理解、步骤还是表达映射。"
+    )
+    return (
+        "阶段 1 初步排查摘要：\n"
+        f"- 排查标签：{'、'.join(tags)}\n"
+        f"- 摘要：{summary}\n\n"
+        "阶段 2 协作要求：\n"
+        "1. 问题要短，一次只验证一个方向。\n"
+        "2. 优先用口头追问，而不是重新出整道新题。\n"
+        "3. 让家长能根据孩子回答继续追问，而不是只得到对错。"
+    )
+
+
 def compile_assistant_prompt(base_system_prompt: str) -> str:
     return (base_system_prompt or "").strip() or DEFAULT_ASSISTANT_SYSTEM_PROMPT
 
@@ -166,6 +209,29 @@ def compile_article_value_cards_prompt(
     return f"{system_prompt}\n\n{value_brief}"
 
 
+def compile_single_question_diagnoser_prompt(
+    base_system_prompt: str,
+    *,
+    target_student_profile: str,
+) -> str:
+    system_prompt = (base_system_prompt or "").strip() or DEFAULT_SINGLE_QUESTION_DIAGNOSER_PROMPT
+    profile_section = _build_target_student_profile_section(target_student_profile)
+    return f"{system_prompt}\n\n{profile_section}"
+
+
+def compile_parent_verifier_prompt(
+    base_system_prompt: str,
+    *,
+    target_student_profile: str,
+    diagnosis_tags: list[str],
+    diagnosis_summary: str,
+) -> str:
+    system_prompt = (base_system_prompt or "").strip() or DEFAULT_PARENT_VERIFICATION_PROMPT
+    profile_section = _build_target_student_profile_section(target_student_profile)
+    diagnosis_brief = build_single_question_diagnosis_brief(diagnosis_tags, diagnosis_summary)
+    return f"{system_prompt}\n\n{profile_section}\n\n{diagnosis_brief}"
+
+
 def compile_prompt_for_contract(
     contract: NodeContract,
     *,
@@ -176,8 +242,11 @@ def compile_prompt_for_contract(
     strategy_text: str,
     value_routes: list[str],
     route_reason: str,
+    diagnosis_tags: list[str],
+    diagnosis_summary: str,
 ) -> str:
     base_prompt = get_prompt_value(prompt_values, contract.prompt_config_key)
+    target_student_profile = get_prompt_value(prompt_values, TARGET_STUDENT_PROFILE_KEY)
 
     if contract.prompt_kind == PromptTemplateKind.ASSISTANT:
         return compile_assistant_prompt(base_prompt)
@@ -212,6 +281,20 @@ def compile_prompt_for_contract(
             route_reason=route_reason,
         )
 
+    if contract.prompt_kind == PromptTemplateKind.SINGLE_QUESTION_DIAGNOSER:
+        return compile_single_question_diagnoser_prompt(
+            base_prompt,
+            target_student_profile=target_student_profile,
+        )
+
+    if contract.prompt_kind == PromptTemplateKind.PARENT_VERIFIER:
+        return compile_parent_verifier_prompt(
+            base_prompt,
+            target_student_profile=target_student_profile,
+            diagnosis_tags=diagnosis_tags,
+            diagnosis_summary=diagnosis_summary,
+        )
+
     raise ValueError(f"Unsupported prompt kind: {contract.prompt_kind}")
 
 
@@ -239,6 +322,8 @@ def build_graph_prompt_previews(
                     strategy_text="{{strategy_text}}",
                     value_routes=["{{value_routes}}"],
                     route_reason="{{route_reason}}",
+                    diagnosis_tags=["{{diagnosis_tags}}"],
+                    diagnosis_summary="{{diagnosis_summary}}",
                 ),
             )
         )

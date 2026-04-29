@@ -80,7 +80,40 @@ function promptSourceLabel(promptSource?: string) {
   return "prompt";
 }
 
+function graphTypeLabel(graphType: GraphType) {
+  if (graphType === "simple_chat") return "简单对话";
+  if (graphType === "summary_analysis") return "总结分析";
+  if (graphType === "viral_tweet") return "爆款推文";
+  if (graphType === "article_value") return "文章价值卡片";
+  if (graphType === "single_question_diagnosis") return "单题错因排查";
+  return graphType;
+}
+
 function getFallbackPromptFields(graphType: GraphType): GraphPromptFieldPreview[] {
+  if (graphType === "single_question_diagnosis") {
+    return [
+      {
+        key: "target_student_profile",
+        label: "针对对象",
+        description: "填写这位孩子的长期背景，系统会在分析具体错题时参考。",
+        placeholder:
+          "例如：昵称/称呼、年龄 / 年级、正在学的内容、平时常见卡点、表达特点、家长沟通时需要注意的方式。",
+      },
+      {
+        key: "analyzer_prompt",
+        label: "阶段 1 提示词（单题错因分析）",
+        description: "用于围绕具体错题生成可验证的错因假设。",
+        placeholder: "例如：请只围绕这道题本身分析 2 到 3 个最可能的错因，不要泛泛归因为粗心。",
+      },
+      {
+        key: "deconstructor_prompt",
+        label: "阶段 2 提示词（家长验证提问）",
+        description: "用于把初步错因分析转成家长可直接提问的验证问题。",
+        placeholder: "例如：请生成家长能直接口头提问的短问题，每题说明它在验证什么。",
+      },
+    ];
+  }
+
   if (graphType === "summary_analysis") {
     return [
       {
@@ -144,6 +177,29 @@ function getFallbackPromptFields(graphType: GraphType): GraphPromptFieldPreview[
 }
 
 function getFallbackNodePreviews(graphType: GraphType): GraphNodePromptPreview[] {
+  if (graphType === "single_question_diagnosis") {
+    return [
+      {
+        node: "mistake_analyzer",
+        node_label: "阶段 1 · 单题错因分析",
+        reads: ["messages"],
+        writes: ["diagnosis_tags", "diagnosis_summary"],
+        purpose: "围绕这一次具体错题，输出 2 到 3 个可验证的错因假设。",
+        prompt_source: "analyzer_prompt",
+        prompt_preview: "",
+      },
+      {
+        node: "parent_verifier",
+        node_label: "阶段 2 · 家长验证提问",
+        reads: ["messages", "diagnosis_tags", "diagnosis_summary"],
+        writes: ["final_output"],
+        purpose: "根据初步错因分析，生成家长可直接口头提问的排查问题。",
+        prompt_source: "deconstructor_prompt",
+        prompt_preview: "",
+      },
+    ];
+  }
+
   if (graphType === "summary_analysis") {
     return [
       {
@@ -227,6 +283,43 @@ function getFallbackNodePreviews(graphType: GraphType): GraphNodePromptPreview[]
 }
 
 function getFallbackStateSlots(graphType: GraphType): GraphStateSlotPreview[] {
+  if (graphType === "single_question_diagnosis") {
+    return [
+      {
+        name: "messages",
+        label: "messages",
+        description: "本次具体错题的题目、孩子答案、标准答案，以及家长补充的观察信息。",
+        kind: "input",
+        written_by: [],
+        read_by: ["mistake_analyzer", "parent_verifier"],
+      },
+      {
+        name: "diagnosis_tags",
+        label: "diagnosis_tags",
+        description: "阶段 1 提炼出的错因排查标签，帮助阶段 2 生成更有针对性的验证问法。",
+        kind: "intermediate",
+        written_by: ["mistake_analyzer"],
+        read_by: ["parent_verifier"],
+      },
+      {
+        name: "diagnosis_summary",
+        label: "diagnosis_summary",
+        description: "阶段 1 的简短分析摘要，概括这道题目前最值得优先排查的方向。",
+        kind: "intermediate",
+        written_by: ["mistake_analyzer"],
+        read_by: ["parent_verifier"],
+      },
+      {
+        name: "final_output",
+        label: "final_output",
+        description: "阶段 2 生成的家长验证提问与观察指引。",
+        kind: "output",
+        written_by: ["parent_verifier"],
+        read_by: [],
+      },
+    ];
+  }
+
   if (graphType === "summary_analysis") {
     return [
       {
@@ -625,7 +718,7 @@ export function GraphConfigPanel({
                       <button type="button" className="flex-1 text-left" onClick={() => selectConfig(config)}>
                         <div className="text-sm font-semibold">{config.name}</div>
                         <div className={cn("mt-1 text-xs", isSelected ? "text-slate-300" : "text-slate-500")}>
-                          类型: {config.graph_type}
+                          类型: {graphTypeLabel(config.graph_type)}
                         </div>
                       </button>
                       {config.is_active ? (
@@ -715,6 +808,7 @@ export function GraphConfigPanel({
               <option value="summary_analysis">总结分析 (Summary & Analysis)</option>
               <option value="viral_tweet">爆款推文 (Viral Tweet)</option>
               <option value="article_value">文章价值卡片 (Article Value Cards)</option>
+              <option value="single_question_diagnosis">单题错因排查 (Single Question Diagnosis)</option>
             </select>
             <p className="text-xs text-slate-500">新增拓扑时优先注册 graph contract、prompt defaults 和 node factory，不再扩散到多个 if/else。</p>
           </div>
