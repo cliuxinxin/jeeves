@@ -762,7 +762,7 @@ export function ChatPane({
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       const usesNewConversationShortcut =
-        (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "n";
+        event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === "n";
 
       if (!usesNewConversationShortcut || event.repeat || event.isComposing) {
         return;
@@ -873,7 +873,7 @@ export function ChatPane({
                   ? "正在创建新对话"
                   : isNewConversationReady
                     ? "新对话已创建"
-                    : "新建对话 (⌘/Ctrl+N)"
+                    : "新建对话 (⌥/Alt+N)"
               }
             >
               {isCreatingConversation ? (
@@ -1297,7 +1297,7 @@ export function ChatPane({
                 ? "正在创建新对话"
                 : isNewConversationReady
                   ? "新对话已创建"
-                  : "新建对话 (⌘/Ctrl+N)"
+                  : "新建对话 (⌥/Alt+N)"
             }
           >
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 shadow-sm">
