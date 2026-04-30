@@ -68,7 +68,7 @@ type ChatPaneProps = {
   isSending: boolean;
   onInputChange: (value: string) => void;
   onSend: () => void;
-  onNewConversation: () => void;
+  onNewConversation: () => Promise<boolean>;
   onLikeInsightCard: (payload: LikedCardCreateRequest) => Promise<void>;
   onUnlikeLikedCard: (likedCardId: number) => Promise<void>;
   onActivateModelConfig: (configId: number) => Promise<void> | void;
@@ -633,10 +633,12 @@ export function ChatPane({
 }: ChatPaneProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const insightCardRefs = useRef<Record<string, HTMLElement | null>>({});
+  const newConversationFeedbackTimeoutRef = useRef<number | null>(null);
   const [expandedMessages, setExpandedMessages] = useState<Record<string, boolean>>({});
   const [copyState, setCopyState] = useState<
     Record<string, "idle" | "copying" | "copied" | "downloaded" | "error">
   >({});
+  const [newConversationState, setNewConversationState] = useState<"idle" | "creating" | "success">("idle");
 
   const displayMessages = useMemo(
     () => [...messages, ...streamingMessages],
@@ -648,6 +650,14 @@ export function ChatPane({
     if (!viewport) return;
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
   }, [displayMessages, isSending]);
+
+  useEffect(() => {
+    return () => {
+      if (newConversationFeedbackTimeoutRef.current !== null) {
+        window.clearTimeout(newConversationFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setExpandedMessages((current) => {
@@ -718,6 +728,36 @@ export function ChatPane({
   const showRuntimeModelOption = runtimeStatus?.configured && activeModelConfigId === null;
   const showModelPlaceholderOption = !runtimeStatus?.configured;
   const isModelSelectDisabled = isModelLoading || isSending || modelConfigs.length === 0;
+  const isCreatingConversation = newConversationState === "creating";
+  const isNewConversationReady = newConversationState === "success";
+
+  function scheduleNewConversationFeedbackReset() {
+    if (newConversationFeedbackTimeoutRef.current !== null) {
+      window.clearTimeout(newConversationFeedbackTimeoutRef.current);
+    }
+
+    newConversationFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setNewConversationState("idle");
+      newConversationFeedbackTimeoutRef.current = null;
+    }, 1800);
+  }
+
+  async function handleRequestNewConversation() {
+    if (isCreatingConversation || isBootstrapping || isConversationLoading) {
+      return;
+    }
+
+    setNewConversationState("creating");
+    const created = await onNewConversation();
+
+    if (!created) {
+      setNewConversationState("idle");
+      return;
+    }
+
+    setNewConversationState("success");
+    scheduleNewConversationFeedbackReset();
+  }
 
   return (
     <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-slate-200 bg-white/92">
@@ -801,9 +841,28 @@ export function ChatPane({
                 <span className="hidden sm:inline">退出 ({authUsername})</span>
               </Button>
             ) : null}
-            <Button type="button" variant="secondary" className="h-10 px-0 sm:px-3" onClick={onNewConversation}>
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">新对话</span>
+            <Button
+              type="button"
+              variant="secondary"
+              className={cn(
+                "h-10 px-0 sm:px-3",
+                isCreatingConversation && "border-amber-300 bg-amber-50 text-amber-900",
+                isNewConversationReady && "border-emerald-300 bg-emerald-50 text-emerald-900",
+              )}
+              onClick={() => void handleRequestNewConversation()}
+              disabled={isCreatingConversation || isBootstrapping || isConversationLoading}
+              title={isCreatingConversation ? "正在创建新对话" : isNewConversationReady ? "新对话已创建" : "新建对话"}
+            >
+              {isCreatingConversation ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : isNewConversationReady ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">
+                {isCreatingConversation ? "创建中" : isNewConversationReady ? "已新建" : "新对话"}
+              </span>
             </Button>
             <Button type="button" variant="secondary" className="h-10 px-0 sm:px-3" onClick={onOpenLikedCards}>
               <Heart className="h-4 w-4" />
@@ -1199,16 +1258,31 @@ export function ChatPane({
           </div>
         ) : null}
 
-        <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-3">
+        <div className="grid w-full grid-cols-[minmax(7.5rem,auto)_1fr_auto] items-center gap-2 sm:gap-3">
           <Button
             type="button"
             variant="secondary"
-            className="h-11 px-3 sm:px-4"
-            onClick={onNewConversation}
-            title="新建对话"
+            className={cn(
+              "h-12 min-w-[7.5rem] rounded-2xl border border-amber-300 bg-amber-50 px-4 text-amber-950 shadow-[0_10px_24px_rgba(245,158,11,0.18)] hover:bg-amber-100 hover:shadow-[0_14px_30px_rgba(245,158,11,0.24)] active:scale-[0.98] sm:min-w-[8.5rem] sm:px-5",
+              isCreatingConversation && "border-amber-400 bg-amber-100 text-amber-950",
+              isNewConversationReady && "border-emerald-300 bg-emerald-50 text-emerald-900 shadow-[0_10px_24px_rgba(16,185,129,0.18)] hover:bg-emerald-100 hover:shadow-[0_14px_30px_rgba(16,185,129,0.22)]",
+            )}
+            onClick={() => void handleRequestNewConversation()}
+            disabled={isCreatingConversation || isBootstrapping || isConversationLoading}
+            title={isCreatingConversation ? "正在创建新对话" : isNewConversationReady ? "新对话已创建" : "新建对话"}
           >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">新对话</span>
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 shadow-sm">
+              {isCreatingConversation ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : isNewConversationReady ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+            </span>
+            <span className="text-sm font-semibold">
+              {isCreatingConversation ? "创建中" : isNewConversationReady ? "已新建" : "新对话"}
+            </span>
           </Button>
 
           <Input

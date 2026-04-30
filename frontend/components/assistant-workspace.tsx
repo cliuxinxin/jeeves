@@ -93,7 +93,7 @@ export default function AssistantWorkspace({
         activeConversationId={conversations.activeConversationId}
         onSelectConversation={(conversationId) => void conversations.selectConversation(conversationId)}
         onDeleteConversation={(conversationId) => void handleDeleteConversation(conversationId)}
-        onCreateConversation={() => void handleCreateConversation()}
+        onCreateConversation={handleCreateConversation}
       />
 
       <section className="min-h-0 flex-1 p-4">
@@ -121,7 +121,7 @@ export default function AssistantWorkspace({
               isSending={chatStream.isSending}
               onInputChange={setInput}
               onSend={() => void handleSend()}
-              onNewConversation={() => void handleCreateConversation()}
+              onNewConversation={handleCreateConversation}
               onLikeInsightCard={handleLikeInsightCard}
               onUnlikeLikedCard={handleUnlikeLikedCard}
               onActivateModelConfig={handleActivateModelFromChat}

@@ -110,13 +110,15 @@ export function useAssistantChatController() {
         graph_config_id: activeGraphId ?? undefined,
       });
       conversations.setActiveConversationId(createdConversation.id);
+      return true;
     } catch (error) {
       const message = describeError(error, "创建对话失败。");
       if (conversations.activeConversationId !== null) {
         setConversationActionNotice(formatCreateConversationNotice(message));
-        return;
+        return false;
       }
       setChatError(message);
+      return false;
     }
   }
 

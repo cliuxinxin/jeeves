@@ -12,7 +12,7 @@ type ConversationSidebarProps = {
   activeConversationId: number | null;
   onSelectConversation: (conversationId: number) => void;
   onDeleteConversation: (conversationId: number) => void;
-  onCreateConversation: () => void;
+  onCreateConversation: () => Promise<boolean>;
 };
 
 export function ConversationSidebar({

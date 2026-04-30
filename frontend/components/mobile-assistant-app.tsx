@@ -244,7 +244,7 @@ export function MobileAssistantApp({
             isSending={chatStream.isSending}
             onInputChange={setInput}
             onSend={() => void handleSend()}
-            onNewConversation={() => void handleCreateConversation()}
+            onNewConversation={handleCreateConversation}
             onLikeInsightCard={handleLikeInsightCard}
             onUnlikeLikedCard={handleUnlikeLikedCard}
             onActivateModelConfig={handleActivateModelFromChat}
