@@ -759,6 +759,23 @@ export function ChatPane({
     scheduleNewConversationFeedbackReset();
   }
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const usesNewConversationShortcut =
+        (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "n";
+
+      if (!usesNewConversationShortcut || event.repeat || event.isComposing) {
+        return;
+      }
+
+      event.preventDefault();
+      void handleRequestNewConversation();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isBootstrapping, isConversationLoading, isCreatingConversation, onNewConversation]);
+
   return (
     <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-slate-200 bg-white/92">
       <CardHeader className="border-b border-slate-200/80 p-3 sm:p-6 sm:pb-4">
@@ -851,7 +868,13 @@ export function ChatPane({
               )}
               onClick={() => void handleRequestNewConversation()}
               disabled={isCreatingConversation || isBootstrapping || isConversationLoading}
-              title={isCreatingConversation ? "正在创建新对话" : isNewConversationReady ? "新对话已创建" : "新建对话"}
+              title={
+                isCreatingConversation
+                  ? "正在创建新对话"
+                  : isNewConversationReady
+                    ? "新对话已创建"
+                    : "新建对话 (⌘/Ctrl+N)"
+              }
             >
               {isCreatingConversation ? (
                 <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -1269,7 +1292,13 @@ export function ChatPane({
             )}
             onClick={() => void handleRequestNewConversation()}
             disabled={isCreatingConversation || isBootstrapping || isConversationLoading}
-            title={isCreatingConversation ? "正在创建新对话" : isNewConversationReady ? "新对话已创建" : "新建对话"}
+            title={
+              isCreatingConversation
+                ? "正在创建新对话"
+                : isNewConversationReady
+                  ? "新对话已创建"
+                  : "新建对话 (⌘/Ctrl+N)"
+            }
           >
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 shadow-sm">
               {isCreatingConversation ? (
