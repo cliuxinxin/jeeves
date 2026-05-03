@@ -95,11 +95,21 @@ export function SettingsDrawer({
   return (
     <div className="fixed inset-0 z-40 flex bg-slate-950/30 backdrop-blur-[2px]">
       <button type="button" className="flex-1" aria-label="关闭设置" onClick={onClose} />
-      <div className="h-full w-full max-w-5xl border-l border-slate-200 bg-white shadow-2xl">
-        <div className="grid h-full min-h-0 md:grid-cols-[13rem_minmax(0,1fr)]">
-          <aside className="border-b border-slate-200 bg-slate-50 p-5 md:border-b-0 md:border-r">
+      <div
+        className={cn(
+          "h-full w-full border-l border-slate-200 bg-white shadow-2xl",
+          section === "likes" ? "max-w-[96rem]" : "max-w-5xl",
+        )}
+      >
+        <div
+          className={cn(
+            "grid h-full min-h-0",
+            section === "likes" ? "md:grid-cols-[11rem_minmax(0,1fr)]" : "md:grid-cols-[13rem_minmax(0,1fr)]",
+          )}
+        >
+          <aside className="border-b border-slate-200 bg-slate-50 p-4 md:border-b-0 md:border-r md:p-5">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="min-w-0">
                 <div className="font-display text-xl font-semibold text-slate-950">设置</div>
                 <div className="mt-1 text-sm text-slate-500">以后可以继续扩展更多配置项</div>
               </div>
@@ -166,7 +176,7 @@ export function SettingsDrawer({
 
           <div className="min-h-0">
             <ScrollArea className="h-full">
-              <div className="space-y-6 p-5 sm:p-6">
+              <div className={cn("space-y-6 p-5 sm:p-6", section === "likes" ? "xl:p-8" : null)}>
                 {section === "model" ? (
                   <ModelConfigPanel
                     runtimeStatus={runtimeStatus}

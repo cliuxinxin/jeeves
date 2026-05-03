@@ -405,7 +405,7 @@ export function LikedCardsPanel() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-4 xl:grid-cols-2">
           {filteredCards.map((card) => (
             (() => {
               const generationLogs = getGenerationLogs(card.workflow_snapshot);
